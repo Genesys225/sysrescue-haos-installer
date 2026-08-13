@@ -87,6 +87,16 @@ if [ "$(id -u)" -ne 0 ]; then
   check "image builder names the command to re-run" bash -c 'bash "$1" 2>&1 | grep -q "sudo"' _ "${IMAGEBUILD}"
 fi
 
+# It attaches a loop device and then hands it to a raw-image writer. On this
+# machine dozens of loop devices back live snap mounts, so the identity of the
+# device it got must be proven, not assumed. The runtime checks need root; what
+# is assertable here is that the guards exist and name the right conditions.
+check "verifies the loop device backs our image" grep -q 'refusing to write:.*backs' "${IMAGEBUILD}"
+check "refuses a non-loop device path" grep -q 'not a loop device' "${IMAGEBUILD}"
+check "refuses a block device as the image" bash -c '! bash "$1" /dev/sdb 2>&1 | grep -q "needs root"' _ "${IMAGEBUILD}"
+check "block-device refusal names the reason" bash -c 'bash "$1" /dev/sdb 2>&1 | grep -q "that is a block device"' _ "${IMAGEBUILD}"
+check "detaches only a device it can still prove is ours" grep -q 'NOT detaching' "${IMAGEBUILD}"
+
 # --- lint -----------------------------------------------------------------
 if command -v shellcheck >/dev/null 2>&1; then
   # -x so shellcheck follows the sourced manifest rather than reporting SC1091.
