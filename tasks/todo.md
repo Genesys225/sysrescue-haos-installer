@@ -76,7 +76,7 @@ Ordered by dependency. See [plan.md](plan.md) for strategy and risks.
   - Files: `src/autorun`
 
 - [x] **Task 9: End-to-end integration** — done, and closed on real hardware rather than only in a guest.
-  - **Stage 2 passed on the laptop.** The disk the installer wrote boots standalone into Home Assistant OS 18.2, Supervisor running, and serves its real frontend: `http://192.0.2.10:8123` returns 200 with `<title>Home Assistant</title>` and `frontend_latest`, and `/api/onboarding` answers `Unauthorized` — Core's own API, not the landing page. Onboarding is reachable from another machine on the LAN.
+  - **Stage 2 passed on real hardware.** The disk the installer wrote boots standalone into Home Assistant OS 18.2, Supervisor running, and serves its real frontend to other machines on the network: port 8123 returns 200 with `<title>Home Assistant</title>` and `frontend_latest`, and `/api/onboarding` answers `Unauthorized` — Core's own API, not the landing page. Onboarding is reachable from another machine on the LAN.
   - The QEMU guest reached the same boot state (HAOS 18.2, Supervisor up, `System is ready!`) but its Core never took over 8123 inside the observation window — every path kept 307-ing to the landing page while the disk grew 1.9 GB → 6.9 GB. Not chased further: the laptop answers the same question with real networking, and NAT'd mDNS is a poor place to test a service that advertises itself by name.
   - Procedure written up in [`tests/integration.md`](../tests/integration.md), including the rule that cost us time: never mount the stick on the host while a guest holds the raw device.
   - **Stage 3 (idempotence) not run.** The second install pass on the same stick remains outstanding.
@@ -87,7 +87,7 @@ Ordered by dependency. See [plan.md](plan.md) for strategy and risks.
   - Files: `tests/qemu-boot.sh`, possibly `tests/integration.md` for the manual steps
 
 - [ ] **Defect found by integration testing: the handover text gives advice that breaks on a populated network**
-  - `report_next_steps` tells the operator to reach the new machine at `http://homeassistant.local:8123`. Every HAOS install advertises that same mDNS name. On this LAN the freshly installed laptop (192.0.2.10) claimed it while an existing Home Assistant was already running at 192.0.2.20 — so the name resolved to the blank test install, not the real system.
+  - `report_next_steps` tells the operator to reach the new machine at `http://homeassistant.local:8123`. Every HAOS install advertises that same mDNS name. Observed during integration testing on a network that already ran Home Assistant: the freshly installed machine claimed the name, and it resolved to the blank test install rather than the live system.
   - That is exactly the audience this installer targets: people who already run Home Assistant and are moving it off a USB stick. Following our own instructions would point them at the wrong machine.
   - Fix: lead with the machine's IP and mention the `.local` name only as a fallback, with a warning that it collides when a network already has a Home Assistant.
 
