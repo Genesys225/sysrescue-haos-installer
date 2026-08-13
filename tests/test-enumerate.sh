@@ -62,7 +62,7 @@ check "keeps an undersized disk as a candidate" bash -c '[ "$1" = "/dev/mmcblk0"
 # --- description lookup ---------------------------------------------------
 desc="$(bash -c '. "$1" --source-only; describe_device "/dev/nvme1n1" < "$2"' _ "${AUTORUN}" "${FIX}/lsblk-workstation.txt")"
 check "describes a device with size and model" bash -c 'grep -q "931.5G" <<< "$1" && grep -q "Example NVMe Plus 1TB" <<< "$1"' _ "${desc}"
-check "description survives spaces in the model" bash -c 'grep -q "EVO Plus 1TB" <<< "$1"' _ "${desc}"
+check "description survives spaces in the model" bash -c 'grep -q "NVMe Plus 1TB" <<< "$1"' _ "${desc}"
 
 if command -v shellcheck >/dev/null 2>&1; then
   check "shellcheck: autorun" shellcheck -x --source-path="${REPO_ROOT}" -S style "${AUTORUN}"

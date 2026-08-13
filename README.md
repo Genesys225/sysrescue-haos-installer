@@ -117,7 +117,7 @@ touched:
 
 ```
   ▸ 1) /dev/nvme0n1  931.5G  Example NVMe Plus 1TB  [nvme]
-    2) /dev/sda      894.3G  EXAMPLE SATA SSD 960G         [sata]
+    2) /dev/sda      894.3G  EXAMPLE SATA SSD 960G   [sata]
 
   Arrow keys or a number to move, Enter to select, Esc to abort.
 ```

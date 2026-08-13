@@ -47,7 +47,7 @@ out="$(printf '1\n/dev/nvme1n1\n' | drive lsblk-workstation.txt /dev/nvme1n1 /de
 
 check "numbers the candidates from 1" grep -q '1)' <<< "${out}"
 check "numbers a second candidate" grep -q '2)' <<< "${out}"
-check "shows size and model" bash -c 'grep -q "931.5G" <<< "$1" && grep -q "Samsung" <<< "$1"' _ "${out}"
+check "shows size and model" bash -c 'grep -q "931.5G" <<< "$1" && grep -q "Example NVMe" <<< "$1"' _ "${out}"
 check "shows the transport" grep -q 'nvme' <<< "${out}"
 check "shows what is already on the disk" grep -q '2 partitions' <<< "${out}"
 
