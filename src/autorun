@@ -569,32 +569,45 @@ main() {
   run_selection
 }
 
+# The orchestration lives in a function rather than at top level so it can be
+# exercised as a whole. Three bugs hid here — the pipeline's subshell losing
+# the chosen target, a reboot offer that ran before the log was written, and
+# then one that could never run at all — and none were reachable by a test
+# that only called individual functions. All three reached hardware.
+run_main() {
+  local rc
+
+  # PIPESTATUS carries main's own status past tee, so a guard's refusal still
+  # sets the exit code the live system acts on.
+  RUNLOG="$(mktemp -t haos-installer.XXXXXX)"
+  main 2>&1 | tee "${RUNLOG}"
+  rc="${PIPESTATUS[0]}"
+
+  # bash runs the left side of a pipeline in a subshell, so the target chosen
+  # inside main was assigned somewhere this scope cannot see. Read it back.
+  TARGET="$(cat "${TARGET_FILE}" 2>/dev/null || true)"
+
+  persist_log "${RUNLOG}" "${rc}"
+  rm -f "${RUNLOG}" "${TARGET_FILE}"
+
+  # Only now, with the record safely on the stick, may the machine be powered
+  # down. With the offer inside the run, an operator who accepted a reboot
+  # took the machine down before the log was written, destroying the only
+  # account of an install that had just succeeded.
+  #
+  # Nothing is offered after a failure: a machine whose install did not
+  # complete should stay up showing why, not invite someone to reboot away
+  # the evidence.
+  if [ "${rc}" -eq 0 ] && [ -n "${TARGET}" ]; then
+    offer_reboot
+  fi
+
+  return "${rc}"
+}
+
 # Sourced by the test suite to reach the functions above without running the
 # installer. Nothing in normal operation passes this.
 [ "${SOURCE_ONLY}" -eq 1 ] && return 0 2>/dev/null
 
-# Capture everything the run says, then persist it. PIPESTATUS carries main's
-# own exit status past tee, so the guards' refusals still set the exit code
-# SystemRescue sees.
-RUNLOG="$(mktemp -t haos-installer.XXXXXX)"
-main 2>&1 | tee "${RUNLOG}"
-rc="${PIPESTATUS[0]}"
-
-# Recover the chosen target from the subshell the pipeline ran main in.
-TARGET="$(cat "${TARGET_FILE}" 2>/dev/null || true)"
-
-persist_log "${RUNLOG}" "${rc}"
-rm -f "${RUNLOG}" "${TARGET_FILE}"
-
-# Only now, with the record safely on the stick, may the machine be powered
-# down. This ordering was learned the hard way: with the offer inside the run,
-# an operator who accepted a reboot took the machine down before the log was
-# written, destroying the only account of an install that had just succeeded.
-#
-# Nothing is offered after a failure — a machine whose install did not complete
-# should stay up, showing why.
-if [ "${rc}" -eq 0 ] && [ -n "${TARGET}" ]; then
-  offer_reboot
-fi
-
-exit "${rc}"
+run_main
+exit "$?"
