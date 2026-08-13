@@ -70,7 +70,18 @@ mkdir -p "${STICK}/sysresccd"          # now it looks like a real stick
 bash "${MAKESTICK}" "${STICK}" > "${ARTIFACT_DIR}/.test-makestick.log" 2>&1
 rc=$?
 check "populates a stick successfully" test "${rc}" -eq 0
-check "installs autorun at the stick root" test -f "${STICK}/autorun"
+# SystemRescue ships an autorun/ FOLDER at the root and searches it for
+# scripts. The script belongs inside it, not at the root as a file.
+check "autorun/ is a directory" test -d "${STICK}/autorun"
+check "installs the script as autorun/autorun" test -f "${STICK}/autorun/autorun"
+check "does not leave a stray file at the root" bash -c '[ ! -f "$1/autorun" ]' _ "${STICK}"
+# Needs a stick where the destination has never been a file, so this gets its
+# own directory rather than reusing the populated one above.
+TRAP_STICK="${ARTIFACT_DIR}/.test-stick-dirtrap"
+rm -rf "${TRAP_STICK}"
+mkdir -p "${TRAP_STICK}/sysresccd" "${TRAP_STICK}/sysrescue.d/500-haos.yaml"
+check "refuses to copy over a directory" bash -c '! bash "$1" "$2" >/dev/null 2>&1' _ "${MAKESTICK}" "${TRAP_STICK}"
+rm -rf "${TRAP_STICK}"
 check "installs the yaml into sysrescue.d/" test -f "${STICK}/sysrescue.d/500-haos.yaml"
 check "installs the HAOS image under haos/" test -f "${STICK}/haos/${HAOS_IMG}"
 check "installs the checksum sidecar" test -f "${STICK}/haos/${HAOS_SHA_SIDECAR}"

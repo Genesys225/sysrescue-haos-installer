@@ -39,10 +39,18 @@ case "${stick}" in
 esac
 
 note "populating ${stick}"
-mkdir -p "${stick}/haos" "${stick}/sysrescue.d" "${stick}/logs"
+# autorun/ is SystemRescue's own drop-in folder — it ships on the ISO with a
+# .gitkeep, and the docs list it as an autorun search location. The script goes
+# INSIDE it as autorun/autorun. Writing to "${stick}/autorun" instead would
+# depend on cp's behaviour when the destination happens to be a directory,
+# which is luck, not intent.
+mkdir -p "${stick}/autorun" "${stick}/haos" "${stick}/sysrescue.d" "${stick}/logs"
 
 install_file() {
   local src="$1" dest="$2"
+  # A directory here means the caller passed a path that already exists as one,
+  # and cp would silently copy *into* it. Refuse rather than guess.
+  [ ! -d "${dest}" ] || die "refusing to copy over a directory: ${dest}"
   if [ -f "${dest}" ] && [ "$(stat -c %s "${src}")" = "$(stat -c %s "${dest}")" ]; then
     note "unchanged: $(basename "${dest}")"
     return 0
@@ -51,14 +59,14 @@ install_file() {
   cp -f "${src}" "${dest}"
 }
 
-install_file "${REPO_ROOT}/src/autorun"        "${stick}/autorun"
+install_file "${REPO_ROOT}/src/autorun"        "${stick}/autorun/autorun"
 install_file "${REPO_ROOT}/src/500-haos.yaml"  "${stick}/sysrescue.d/500-haos.yaml"
 install_file "${img}"                          "${stick}/haos/${HAOS_IMG}"
 install_file "${sidecar}"                      "${stick}/haos/${HAOS_SHA_SIDECAR}"
 
 # Harmless on FAT32, which cannot store the bit — but the stick may one day be
 # ext4, and setting it costs nothing.
-chmod +x "${stick}/autorun" 2>/dev/null || true
+chmod +x "${stick}/autorun/autorun" 2>/dev/null || true
 
 sync
 note "done"
