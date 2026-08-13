@@ -141,16 +141,66 @@ report() {
   hr
 }
 
+# --- persistence ----------------------------------------------------------
+
+# The boot medium mounts read-only, so the run has to remount it to leave any
+# trace. Verified working on hardware. This runs whether the installer
+# succeeded or refused — a refusal that vanishes at poweroff is the worst
+# outcome, because the operator loses the one thing that explains it.
+persist_log() {
+  local src="$1" rc="$2" logdir="${BOOTMNT}/logs" dest remounted=0
+
+  # Never fabricate the boot medium. If it is not there, there is nothing to
+  # write to, and creating directories would only disguise that.
+  [ -d "${BOOTMNT}" ] || return 0
+
+  if ! ( : > "${BOOTMNT}/.write-probe.$$" ) 2>/dev/null; then
+    if mount -o remount,rw "${BOOTMNT}" 2>/dev/null; then
+      remounted=1
+    fi
+  else
+    rm -f "${BOOTMNT}/.write-probe.$$"
+  fi
+
+  # Clock skew is real — the test laptop's was three weeks slow — so the name
+  # carries the host and the pid too, and successive runs never collide.
+  dest="${logdir}/preflight-$(date -u '+%Y%m%dT%H%M%SZ')-$(uname -n)-$$.log"
+
+  if mkdir -p "${logdir}" 2>/dev/null && cp "${src}" "${dest}" 2>/dev/null; then
+    sync
+    printf '\n  Log written: %s\n' "${dest}"
+  else
+    printf '\n  Could not write a log to %s — capture the screen instead.\n' "${logdir}"
+  fi
+
+  # Leave the medium as it was found, so it can be pulled without a dirty
+  # unmount.
+  [ "${remounted}" -eq 1 ] && mount -o remount,ro "${BOOTMNT}" 2>/dev/null
+  return "${rc}"
+}
+
 # --- main -----------------------------------------------------------------
 
-require_bootmnt
-require_uefi
-require_single_image
-require_checksum
+main() {
+  require_bootmnt
+  require_uefi
+  require_single_image
+  require_checksum
 
-gather
-report
+  gather
+  report
 
-say ""
-say "  Preflight complete. No disk has been touched."
-exit 0
+  say ""
+  say "  Preflight complete. No disk has been touched."
+}
+
+# Capture everything the run says, then persist it. PIPESTATUS carries main's
+# own exit status past tee, so the guards' refusals still set the exit code
+# SystemRescue sees.
+RUNLOG="$(mktemp -t haos-installer.XXXXXX)"
+main 2>&1 | tee "${RUNLOG}"
+rc="${PIPESTATUS[0]}"
+
+persist_log "${RUNLOG}" "${rc}"
+rm -f "${RUNLOG}"
+exit "${rc}"
