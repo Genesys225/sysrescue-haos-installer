@@ -55,7 +55,7 @@ logs_in() { find "${WORK}/logs" -maxdepth 1 -type f -name '*.log' -printf '%f\n'
 # a decline of the reboot offer.
 make_bootmnt "${WORK}"
 out="$(run_whole '1
-/dev/vda
+yes
 n
 ')"
 
@@ -77,7 +77,7 @@ check "the log records the write" bash -c 'grep -q "STUB_WRITE" "$1"/logs/*.log'
 # the medium by the time anything can power the machine down.
 make_bootmnt "${WORK}"
 out="$(run_whole '1
-/dev/vda
+yes
 r
 ')"
 check "accepting the offer reboots" grep -q 'STUB_REBOOT' <<< "${out}"

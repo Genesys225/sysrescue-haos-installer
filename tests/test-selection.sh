@@ -71,20 +71,22 @@ for bad in "0" "99" "abc" ""; do
 done
 
 # --- confirmation ---------------------------------------------------------
-# A bare y is not accepted. The operator types the device path, which is the
-# one thing they cannot get right by reflex.
+# On a console this is a second selection, defaulting to Cancel. Piped input
+# has no highlight, so it asks for the word outright.
 out="$(printf '1\ny\n' | drive lsblk-single-disk.txt /dev/nvme0n1)"
-check "rejects a bare y as confirmation" bash -c '! grep -q "WOULD WRITE" <<< "$1"' _ "${out}"
-check "says the confirmation did not match" grep -qi 'did not match\|not confirmed' <<< "${out}"
+check "rejects a bare y" bash -c '! grep -q "WOULD WRITE" <<< "$1"' _ "${out}"
+check "says it was not confirmed" grep -qi 'did not match\|not confirmed' <<< "${out}"
 
-out="$(printf '1\n/dev/sda\n' | drive lsblk-single-disk.txt /dev/nvme0n1)"
-check "rejects the path of a different disk" bash -c '! grep -q "WOULD WRITE" <<< "$1"' _ "${out}"
+out="$(printf '1\nno\n' | drive lsblk-single-disk.txt /dev/nvme0n1)"
+check "rejects an explicit no" bash -c '! grep -q "WOULD WRITE" <<< "$1"' _ "${out}"
 
 out="$(printf '1\n\n' | drive lsblk-single-disk.txt /dev/nvme0n1)"
 check "rejects an empty confirmation" bash -c '! grep -q "WOULD WRITE" <<< "$1"' _ "${out}"
 
-out="$(printf '1\n/dev/nvme0n1\n' | drive lsblk-single-disk.txt /dev/nvme0n1)"
-check "accepts the exact device path" grep -q 'WOULD WRITE' <<< "${out}"
+out="$(printf '1\nyes\n' | drive lsblk-single-disk.txt /dev/nvme0n1)"
+check "accepts yes" grep -q 'WOULD WRITE' <<< "${out}"
+
+check "no longer demands a typed device path" bash -c '! grep -q "Type the device path" "$1"' _ "${AUTORUN}"
 check "warns that the contents are destroyed" grep -qi 'destroy\|erase\|overwrit' <<< "${out}"
 
 # --- the stub is still a stub ---------------------------------------------

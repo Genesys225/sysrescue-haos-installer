@@ -262,12 +262,24 @@ confirm_target() {
   say "  Everything on it is destroyed, including any operating system already"
   say "  installed. This cannot be undone."
   say ""
-  printf '  Type the device path exactly to confirm: '
-  read -r answer || answer=""
 
-  [ "${answer}" = "${dev}" ] ||
-    die "confirmation did not match — you typed '${answer}', the target is '${dev}'.
-     Nothing was written. No disk has been modified."
+  if [ -t 0 ]; then
+    # A second selection rather than a typed path. The safety is in where the
+    # highlight starts: Cancel is first, so Enter pressed by reflex aborts.
+    # Erasing requires a deliberate move down before confirming.
+    select_from_list "Cancel — leave ${dev} untouched" "ERASE ${dev} and install Home Assistant OS" ||
+      die "cancelled. Nothing was written."
+    case "${SELECTED}" in
+      ERASE*) return 0 ;;
+      *) die "cancelled — ${dev} was not touched. Nothing was written." ;;
+    esac
+  else
+    # Piped input has no highlight to default to, so it must say so outright.
+    printf "  Type 'yes' to erase %s: " "${dev}"
+    read -r answer || answer=""
+    [ "${answer}" = "yes" ] ||
+      die "not confirmed — you answered '${answer}'. Nothing was written."
+  fi
 }
 
 # Last line of defence. Enumeration only ever offers block devices, so if a
