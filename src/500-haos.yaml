@@ -1,0 +1,36 @@
+# SystemRescue configuration drop-in for the HAOS installer stick.
+#
+# Lives at <stick root>/sysrescue.d/500-haos.yaml. SystemRescue reads every
+# *.yaml in that directory in lexicographic order and merges them, later files
+# overriding earlier ones. The extension must be .yaml — .yml is ignored.
+# 500 leaves room for defaults to sort before us and overrides after us.
+
+global:
+  # No graphical desktop. The installer is a console program; starting X would
+  # only bury its output behind a desktop nobody asked for.
+  dostartx: false
+
+  # copytoram is deliberately OFF. Running from RAM would let the operator pull
+  # the stick early, but it also unmounts the boot medium — and the installer
+  # writes its log back to the stick so a failed run can be diagnosed after the
+  # fact. Keeping the medium mounted is worth more than early removal.
+  copytoram: false
+
+autorun:
+  # Run straight through without pausing for a keypress. The operator interacts
+  # with the installer itself; the autorun harness should stay invisible.
+  ar_nowait: true
+
+  # A failed script should stop the sequence rather than press on. Nothing
+  # downstream of a failed install is worth running.
+  ar_ignorefail: false
+
+  # NOTE — deliberately NOT using an `exec:` list here.
+  #
+  # The autorun scope also accepts explicit `exec:` entries with a `shell: true`
+  # key, which would run our script through /bin/sh regardless of whether it
+  # carries an executable bit. That is precisely the escape hatch we would need
+  # if FAT32's inability to store a POSIX exec bit stops the plain drop-in from
+  # running — and using it now would mask the one thing this skeleton exists to
+  # find out. We rely on filename discovery (an `autorun` file at the boot
+  # device root) until a boot proves that insufficient.

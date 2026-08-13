@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# HAOS Installer — walking skeleton.
+#
+# This does NOT install anything. Its only job is to answer the question the
+# whole design rests on: does a file dropped onto a writable SystemRescue stick
+# actually get executed at boot? Everything else in this project is ordinary
+# shell scripting; this is the part that could invalidate the base choice.
+#
+# It reports four things, to the console and to a file on the stick:
+#   1. whether the machine booted UEFI or legacy BIOS
+#   2. the permission bits this script was given (FAT32 cannot store an exec
+#      bit — if the drop-in fails to run, this is the first suspect)
+#   3. what the boot medium actually contains, and where it is mounted
+#   4. whether the boot medium is writable from inside the live environment
+#
+# Deliberately not `set -e`: a skeleton that dies on the first surprise reports
+# nothing, and reporting is the entire point.
+set -uo pipefail
+
+BOOTMNT="/run/archiso/bootmnt"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --bootmnt) BOOTMNT="${2:-}"; shift 2 ;;   # test injection only
+    *) shift ;;
+  esac
+done
+
+hr()  { printf '========================================================\n'; }
+say() { printf '%s\n' "$*"; }
+
+# --- gather ---------------------------------------------------------------
+if [ -d /sys/firmware/efi ]; then
+  firmware="UEFI"
+else
+  firmware="legacy BIOS / CSM"
+fi
+
+self="${BASH_SOURCE[0]}"
+if mode="$(stat -c '%A (%a)' "${self}" 2>/dev/null)"; then :; else mode="unknown"; fi
+if [ -x "${self}" ]; then exec_bit="present"; else exec_bit="ABSENT"; fi
+
+mount_line="$(awk -v m="${BOOTMNT}" '$2 == m { print $3, $4 }' /proc/mounts 2>/dev/null)"
+[ -n "${mount_line}" ] || mount_line="(not a mount point)"
+
+# Can we write back to the stick? Task 8 logs depend on this, and a read-only
+# medium would silently break it, so find out now rather than then.
+probe="${BOOTMNT}/.write-probe.$$"
+if ( : > "${probe}" ) 2>/dev/null; then
+  writable="yes"
+  rm -f "${probe}"
+else
+  writable="NO — boot medium is not writable from the live environment"
+fi
+
+# --- report ---------------------------------------------------------------
+report() {
+  hr
+  say "  HAOS Installer — walking skeleton"
+  say "  If you are reading this, the drop-in mechanism WORKS."
+  hr
+  say ""
+  say "  Firmware mode : ${firmware}"
+  say "  Script path   : ${self}"
+  say "  Permission    : mode: ${mode} — exec bit ${exec_bit}"
+  say "  Boot medium   : ${BOOTMNT}"
+  say "  Mounted as    : ${mount_line}"
+  say "  Writable      : ${writable}"
+  say "  Host          : $(uname -n) / $(uname -r)"
+  say "  Date          : $(date -u '+%Y-%m-%d %H:%M:%SZ')"
+  say ""
+  say "  Boot medium contents:"
+  find "${BOOTMNT}" -maxdepth 1 -mindepth 1 -printf '    %M %10s  %f\n' 2>&1 | sort -k3
+  say ""
+  say "  Payload:"
+  find "${BOOTMNT}/haos" -maxdepth 1 -mindepth 1 -printf '    %M %10s  %f\n' 2>&1 | sort -k3
+  say ""
+  hr
+}
+
+report
+
+# --- leave evidence that survives the reboot ------------------------------
+# The checkpoint should be judged from the stick, not from someone's memory of
+# a console that scrolled past.
+logdir="${BOOTMNT}/logs"
+stamp="$(date -u '+%Y%m%dT%H%M%SZ')"
+logfile="${logdir}/skeleton-${stamp}-$(uname -n).txt"
+
+if mkdir -p "${logdir}" 2>/dev/null && report > "${logfile}" 2>/dev/null; then
+  say "  Report written to ${logfile}"
+else
+  say "  COULD NOT write a report to ${logdir} — capture the screen instead."
+fi
+
+say ""
+say "  Skeleton finished. Nothing was installed and no disk was touched."
+exit 0
