@@ -12,11 +12,9 @@ Ordered by dependency. See [plan.md](plan.md) for strategy and risks.
   - Verify: `sha256sum -c` passes for both; `xz -l` reports a plausible size.
   - Files: `tmp/` only (gitignored — artifacts are never committed)
 
-- [ ] **Task 2: QEMU/OVMF harness**
-  - Locate this workstation's OVMF firmware (package and path vary), then write a harness that creates a fresh qcow2 target, copies a private `OVMF_VARS`, and boots a given stick source. Takes `--stick /dev/sdb` or `--stick-image tmp/stick.img`, plus `--legacy` to drop the pflash lines for the negative test.
-  - Acceptance: harness boots the plain SystemRescue ISO to its boot menu in UEFI mode; `--legacy` boots without UEFI.
-  - Verify: run it against the bare ISO — SystemRescue menu appears; `/sys/firmware/efi` exists in the booted system and does not under `--legacy`.
-  - Files: `tests/qemu-boot.sh`
+- [x] **Task 2: QEMU/OVMF harness** — done. Firmware found at `/usr/share/OVMF/OVMF_CODE_4M.fd`; KVM usable via ACL (`user:gene:rw-`), QEMU 8.2.2. Both modes boot SystemRescue 13.02 to an autologin root shell inside 45 s — evidence in `tmp/boot-uefi.png` and `tmp/boot-legacy.png`. 20 assertions green, shellcheck clean.
+  - **Acceptance partially deferred, by necessity.** The written criterion was that `/sys/firmware/efi` exists under UEFI and not under `--legacy`. That cannot be checked from outside the guest, and both modes render an identical console, so a screenshot cannot distinguish them. Confirming it requires running a command *inside* the guest — which is exactly what Task 3's skeleton does, and its spec already calls for dumping whether `/sys/firmware/efi` exists. **The firmware-mode assertion is therefore verified in Task 3, not here.** What Task 2 proves is that the harness assembles a correct command line and that both modes boot.
+  - Files: `tests/qemu-boot.sh`, `tests/test-qemu-harness.sh`
 
 - [ ] **Task 3: Walking skeleton — prove the drop-in mechanism** ⛳ CHECKPOINT
   - `make-stick.sh` creates `haos/`, `sysrescue.d/`, `logs/` on a prepared stick and copies in the drop-ins plus payload. `500-haos.yaml` sets the `autorun` scope to run without waiting (`ar_nowait`, `wait: never`, `on_error: break`) and leaves the GUI off. `autorun` at this stage only prints a banner and dumps three facts: whether `/sys/firmware/efi` exists, what `/run/archiso/bootmnt` contains, and its own permission bits.

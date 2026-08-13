@@ -88,18 +88,13 @@ Versions and URLs live in **`build/artifacts.conf`** and nowhere else — the fe
 **Test (QEMU, nothing real at risk):**
 
 ```bash
-qemu-img create -f qcow2 tmp/target.qcow2 64G
-cp /usr/share/OVMF/OVMF_VARS_4M.fd tmp/OVMF_VARS.fd
-sudo qemu-system-x86_64 -enable-kvm -m 4096 -machine q35 \
-  -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
-  -drive if=pflash,format=raw,file=tmp/OVMF_VARS.fd \
-  -device qemu-xhci \
-  -drive file=/dev/sdb,format=raw,if=none,id=stick -device usb-storage,drive=stick \
-  -drive file=tmp/target.qcow2,format=qcow2,if=virtio \
-  -boot menu=on
+./tests/qemu-boot.sh --iso tmp/systemrescue-13.02-amd64.iso   # bare ISO
+./tests/qemu-boot.sh --stick /dev/sdb                          # the real stick
+./tests/qemu-boot.sh --legacy --iso ...                        # negative test
+./tests/qemu-boot.sh --iso ... --screenshot tmp/boot.ppm       # headless evidence
 ```
 
-**Negative test (legacy BIOS):** same command with both `pflash` lines removed — the script must refuse to write.
+The harness discovers OVMF itself, copies a **private** `OVMF_VARS` into `tmp/` so the root-owned system copy is never mutated, and deliberately skips the `secboot`/`ms` firmware variants — HAOS requires Secure Boot off, so testing against Secure Boot firmware would validate a configuration we do not support. `--stick` accepts **removable devices only**; there is no override flag, because this project's entire purpose is writing raw images to block devices.
 
 **Unit tests:** `./tests/run.sh`
 
