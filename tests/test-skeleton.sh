@@ -32,29 +32,19 @@ check "yaml declares the autorun scope" grep -q '^autorun:' "${YAML}"
 check "yaml runs without waiting" grep -qE 'ar_nowait|wait:' "${YAML}"
 check "yaml does not enable copytoram" bash -c '! grep -qE "^\s*copytoram:\s*true" "$1"' _ "${YAML}"
 
-# --- the autorun script, run against a fake boot medium -------------------
-FAKE="${ARTIFACT_DIR}/.test-bootmnt"
-rm -rf "${FAKE}"; mkdir -p "${FAKE}/haos" "${FAKE}/logs"
-: > "${FAKE}/haos/${HAOS_IMG}"
-
-OUT="${ARTIFACT_DIR}/.test-autorun-out.txt"
-bash "${AUTORUN}" --bootmnt "${FAKE}" > "${OUT}" 2>&1 || true
-
-check "autorun prints a banner" grep -qi 'haos installer' "${OUT}"
-check "autorun reports firmware mode" grep -qi 'firmware' "${OUT}"
-check "autorun reports its own permission bits" grep -qi 'permission\|exec bit\|mode:' "${OUT}"
-check "autorun reports the boot medium contents" grep -q "${HAOS_IMG}" "${OUT}"
-
-# The whole point of the skeleton: leave evidence behind that survives a
-# reboot, so the checkpoint can be judged from the stick rather than from
-# someone's memory of a screen.
-check "autorun writes a report onto the boot medium" bash -c 'ls "$1"/logs/skeleton-*.txt >/dev/null 2>&1' _ "${FAKE}"
-check "the report names the firmware mode" bash -c 'grep -qi firmware "$1"/logs/skeleton-*.txt' _ "${FAKE}"
-
-# It must never exit non-zero on a healthy run — SystemRescue's on_error:
-# break would halt the sequence and hide the very output we need.
-bash "${AUTORUN}" --bootmnt "${FAKE}" >/dev/null 2>&1
-check "autorun exits 0 on a healthy run" test $? -eq 0
+# --- the autorun script ---------------------------------------------------
+# Task 3's assertions about the script's own output have moved to
+# test-preflight.sh, which builds a boot medium complete enough to get past
+# the guards. Two Task 3 behaviours were deliberately dropped in Task 4:
+#
+#   * writing a report file to the boot medium — the medium is mounted
+#     read-only, so it never worked on hardware. Logging is Task 8's, and
+#     needs a remount first.
+#   * mkdir -p on the boot medium path — a side effect that created the very
+#     directory a later test needed to be absent.
+#
+# What remains here is Task 3's actual deliverable: the drop-in files and the
+# builder that installs them.
 
 # --- make-stick.sh --------------------------------------------------------
 STICK="${ARTIFACT_DIR}/.test-stick"

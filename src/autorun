@@ -1,27 +1,29 @@
 #!/usr/bin/env bash
-# HAOS Installer — walking skeleton.
+# HAOS Installer — runs automatically when SystemRescue boots from this stick.
 #
-# This does NOT install anything. Its only job is to answer the question the
-# whole design rests on: does a file dropped onto a writable SystemRescue stick
-# actually get executed at boot? Everything else in this project is ordinary
-# shell scripting; this is the part that could invalidate the base choice.
+# Currently: preflight only. It refuses to go further when the machine or the
+# medium cannot produce a working install, and reports what it found. Target
+# selection and the write itself come next.
 #
-# It reports four things, to the console and to a file on the stick:
-#   1. whether the machine booted UEFI or legacy BIOS
-#   2. the permission bits this script was given (FAT32 cannot store an exec
-#      bit — if the drop-in fails to run, this is the first suspect)
-#   3. what the boot medium actually contains, and where it is mounted
-#   4. whether the boot medium is writable from inside the live environment
+# Note on how this executes: SystemRescue does not run this file in place. It
+# copies it to /var/autorun/tmp/ and runs it there at mode 755, then deletes
+# it. The boot filesystem's permission model is therefore irrelevant — a fact
+# established by booting real hardware, not assumed.
 #
-# Deliberately not `set -e`: a skeleton that dies on the first surprise reports
-# nothing, and reporting is the entire point.
+# Deliberately not `set -e`: every failure here is handled explicitly by a
+# guard that explains itself. An unexplained exit is worse than none.
 set -uo pipefail
 
 BOOTMNT="/run/archiso/bootmnt"
+EFI_SYSFS="/sys/firmware/efi"
 
+# Both overrides exist so the guards can be exercised without booting a
+# machine. Nothing in normal operation passes them — SystemRescue invokes this
+# script with no arguments at all.
 while [ $# -gt 0 ]; do
   case "$1" in
-    --bootmnt) BOOTMNT="${2:-}"; shift 2 ;;   # test injection only
+    --bootmnt)  BOOTMNT="${2:-}";   shift 2 ;;
+    --efi-path) EFI_SYSFS="${2:-}"; shift 2 ;;
     *) shift ;;
   esac
 done
@@ -29,35 +31,98 @@ done
 hr()  { printf '========================================================\n'; }
 say() { printf '%s\n' "$*"; }
 
-# --- gather ---------------------------------------------------------------
-if [ -d /sys/firmware/efi ]; then
-  firmware="UEFI"
-else
-  firmware="legacy BIOS / CSM"
-fi
+# Every refusal states the cause AND the operator's next action. A message
+# that only names the failure leaves someone stranded in a live environment
+# with no package manager and no browser.
+die() {
+  printf '\n[FATAL] %s\n\n' "$*" >&2
+  exit 1
+}
 
-self="${BASH_SOURCE[0]}"
-if mode="$(stat -c '%A (%a)' "${self}" 2>/dev/null)"; then :; else mode="unknown"; fi
-if [ -x "${self}" ]; then exec_bit="present"; else exec_bit="ABSENT"; fi
+IMAGE=""
 
-mount_line="$(awk -v m="${BOOTMNT}" '$2 == m { print $3, $4 }' /proc/mounts 2>/dev/null)"
-[ -n "${mount_line}" ] || mount_line="(not a mount point)"
+# --- preflight guards, in dependency order --------------------------------
 
-# Can we write back to the stick? Task 8 logs depend on this, and a read-only
-# medium would silently break it, so find out now rather than then.
-probe="${BOOTMNT}/.write-probe.$$"
-if ( : > "${probe}" ) 2>/dev/null; then
-  writable="yes"
-  rm -f "${probe}"
-else
-  writable="NO — boot medium is not writable from the live environment"
-fi
+require_bootmnt() {
+  [ -d "${BOOTMNT}" ] || die "no boot medium found at ${BOOTMNT}.
+     This installer is meant to run from the SystemRescue stick, where that
+     path is the stick itself. Boot the target machine from the stick and let
+     it start on its own — do not run this script on a working system."
+}
+
+require_uefi() {
+  [ -d "${EFI_SYSFS}" ] || die "this machine booted in legacy BIOS/CSM mode.
+     Home Assistant OS requires UEFI. Installing now would write an image this
+     machine cannot boot, and the failure would only appear after the disk had
+     already been erased.
+     Reboot into firmware setup, enable UEFI boot, disable Secure Boot, then
+     boot from this stick again."
+}
+
+require_single_image() {
+  local images=()
+  mapfile -t images < <(find "${BOOTMNT}/haos" -maxdepth 1 -type f -name '*.img.xz' 2>/dev/null | sort)
+
+  case "${#images[@]}" in
+    0) die "no Home Assistant OS image on this stick (looked in ${BOOTMNT}/haos).
+     The stick was not fully populated. On the machine that built it, run:
+       ./build/fetch-artifacts.sh
+       ./build/make-stick.sh /media/\$USER/RESCUE1302" ;;
+    1) IMAGE="${images[0]}" ;;
+    *) die "found ${#images[@]} images in ${BOOTMNT}/haos; there must be exactly one.
+     This installer will not guess which version you meant. Remove all but the
+     one you want to install:
+$(printf '       %s\n' "${images[@]}")" ;;
+  esac
+}
+
+require_checksum() {
+  local sidecar="${IMAGE}.sha256" expected actual
+
+  [ -s "${sidecar}" ] || die "no checksum beside $(basename "${IMAGE}").
+     Without it there is no way to tell a good image from a damaged one, and
+     a damaged image produces a machine that will not boot. Re-populate the
+     stick with ./build/make-stick.sh to restore it."
+
+  say "  Verifying image integrity (this reads the whole file)..."
+  expected="$(awk '{print $1}' "${sidecar}")"
+  actual="$(sha256sum "${IMAGE}" | awk '{print $1}')"
+
+  [ "${expected}" = "${actual}" ] || die "image checksum does not match.
+     $(basename "${IMAGE}") is corrupt, or the stick has rotted — flash left in
+     a drawer does decay. Nothing has been written to any disk.
+     Re-populate the stick with ./build/make-stick.sh and try again.
+       expected ${expected}
+       actual   ${actual}"
+}
 
 # --- report ---------------------------------------------------------------
+
+gather() {
+  if [ -d "${EFI_SYSFS}" ]; then firmware="UEFI"; else firmware="legacy BIOS / CSM"; fi
+
+  self="${BASH_SOURCE[0]}"
+  mode="$(stat -c '%A (%a)' "${self}" 2>/dev/null)" || mode="unknown"
+  if [ -x "${self}" ]; then exec_bit="present"; else exec_bit="ABSENT"; fi
+
+  mount_line="$(awk -v m="${BOOTMNT}" '$2 == m { print $3, $4 }' /proc/mounts 2>/dev/null)"
+  [ -n "${mount_line}" ] || mount_line="(not a mount point)"
+
+  # The boot medium is mounted read-only by default — confirmed on hardware.
+  # Logging back to the stick needs an explicit remount, which is the writing
+  # task's problem, not preflight's.
+  probe="${BOOTMNT}/.write-probe.$$"
+  if ( : > "${probe}" ) 2>/dev/null; then
+    writable="yes"
+    rm -f "${probe}"
+  else
+    writable="no — read-only mount; logging will need remount,rw"
+  fi
+}
+
 report() {
   hr
-  say "  HAOS Installer — walking skeleton"
-  say "  If you are reading this, the drop-in mechanism WORKS."
+  say "  HAOS Installer — preflight passed"
   hr
   say ""
   say "  Firmware mode : ${firmware}"
@@ -66,11 +131,9 @@ report() {
   say "  Boot medium   : ${BOOTMNT}"
   say "  Mounted as    : ${mount_line}"
   say "  Writable      : ${writable}"
+  say "  Image         : $(basename "${IMAGE}") (checksum verified)"
   say "  Host          : $(uname -n) / $(uname -r)"
   say "  Date          : $(date -u '+%Y-%m-%d %H:%M:%SZ')"
-  say ""
-  say "  Boot medium contents:"
-  find "${BOOTMNT}" -maxdepth 1 -mindepth 1 -printf '    %M %10s  %f\n' 2>&1 | sort -k3
   say ""
   say "  Payload:"
   find "${BOOTMNT}/haos" -maxdepth 1 -mindepth 1 -printf '    %M %10s  %f\n' 2>&1 | sort -k3
@@ -78,21 +141,16 @@ report() {
   hr
 }
 
+# --- main -----------------------------------------------------------------
+
+require_bootmnt
+require_uefi
+require_single_image
+require_checksum
+
+gather
 report
 
-# --- leave evidence that survives the reboot ------------------------------
-# The checkpoint should be judged from the stick, not from someone's memory of
-# a console that scrolled past.
-logdir="${BOOTMNT}/logs"
-stamp="$(date -u '+%Y%m%dT%H%M%SZ')"
-logfile="${logdir}/skeleton-${stamp}-$(uname -n).txt"
-
-if mkdir -p "${logdir}" 2>/dev/null && report > "${logfile}" 2>/dev/null; then
-  say "  Report written to ${logfile}"
-else
-  say "  COULD NOT write a report to ${logdir} — capture the screen instead."
-fi
-
 say ""
-say "  Skeleton finished. Nothing was installed and no disk was touched."
+say "  Preflight complete. No disk has been touched."
 exit 0

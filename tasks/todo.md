@@ -30,11 +30,10 @@ Ordered by dependency. See [plan.md](plan.md) for strategy and risks.
   - **Stop here.** Escalation order if it does not run: `shell: true` in the autorun scope, then `sysrescue-customize` with the same files in `iso_add/` (costs a build step, keeps the design — see [prior-art.md](../docs/prior-art.md)). The base choice only reopens if all three fail.
   - Files: `build/make-stick.sh`, `src/500-haos.yaml`, `src/autorun`
 
-- [ ] **Task 4: Preflight guards**
-  - Implement `require_uefi`, `require_bootmnt`, `require_single_image`, `require_checksum`. Each exits non-zero with a message naming the operator's next action.
-  - Acceptance: all four fire correctly; no guard message describes only the failure without a remedy.
-  - Verify: `--legacy` boot refuses to proceed; a corrupted sidecar refuses; a second `.img.xz` on the stick refuses; running `src/autorun` on the workstation exits at the bootmnt guard without enumerating anything.
-  - Files: `src/autorun`, `tests/run.sh`
+- [x] **Task 4: Preflight guards** — code complete. All four implemented and covered by 22 assertions in `tests/test-preflight.sh`, each checked for both the refusal and its remediation text. Corrupt checksum, missing sidecar, zero images, two images, legacy boot, and absent boot medium all refuse. Running `src/autorun` on the workstation stops at the bootmnt guard without listing anything.
+  - **Outstanding: the boot-level check.** The guards have not yet been seen refusing on real hardware. The test laptop boots legacy, so re-populating the stick and booting it there exercises `require_uefi` against the real thing — the one guard whose failure mode is most expensive to get wrong.
+  - Two Task 3 behaviours were removed here, deliberately: writing a report file to the boot medium (impossible on a read-only mount; Task 8 owns logging after a remount) and `mkdir -p` on the boot medium path (a side effect that created a directory a later test needed absent).
+  - Files: `src/autorun`, `tests/test-preflight.sh`, `tests/test-skeleton.sh`
 
 - [ ] **Task 5: Candidate enumeration and filtering**
   - `list_candidates()` over `lsblk -dpno NAME,SIZE,MODEL,TRAN,RM,TYPE`: keep `TYPE=disk`; drop `RM=1`, `TRAN=usb`, loop/zram/rom, and the boot device. Boot device resolves via `findmnt -no SOURCE /run/archiso/bootmnt` → partition → parent disk.
