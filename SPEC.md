@@ -15,7 +15,9 @@ Stated up front so they can be shot down before they cost anything:
 
 A reusable USB stick that boots a bare x86-64 machine into a live environment and writes Home Assistant OS onto **that machine's internal disk**, with the image carried on the stick and a human confirming before anything is destroyed.
 
-**Why this exists.** HAOS running *from* a USB stick is the failure mode being retired. The 64 GB Kingston earmarked as the test medium is itself a corpse of that pattern: HAOS installed 2025‑06‑25, and by 2026‑07‑01 the docker directory was empty, both writable partitions had populated `lost+found`, and nothing was recoverable. Flash wear on a stick under HAOS's write load is not survivable long-term. Installing to internal NVMe/SATA removes the failure mode.
+**Why this exists.** HAOS running *from* a USB stick is the failure mode being retired. Installing to internal NVMe/SATA removes a class of problems — slow random I/O, flash wear under a database workload, and a boot device that can be knocked out of its socket.
+
+> **Correction (Task 3).** This section originally offered the dead 64 GB Kingston as proof of that thesis: HAOS installed 2025‑06‑25, docker directory empty and `lost+found` populated on both writable partitions by 2026‑07‑01. That was an over-claim on a single data point. On 2026‑08‑13, mid-Task-3, the stick reported `detected capacity change from 120913920 to 0` — it still enumerates on the USB bus but its storage layer now returns zero capacity. That is a **failed flash controller**, which explains the 2026‑07 corruption at least as well as write-wear does. The rationale above stands on its general merits; this particular stick is not evidence for it.
 
 **Who it's for.** The operator standing at the target machine. Assumed competent with a boot menu; assumed to know nothing about that machine's disk layout, which is why the tool shows its work before it writes.
 

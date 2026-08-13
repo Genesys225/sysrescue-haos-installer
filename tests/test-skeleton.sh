@@ -77,6 +77,16 @@ check "installs the checksum sidecar" test -f "${STICK}/haos/${HAOS_SHA_SIDECAR}
 check "creates the logs directory" test -d "${STICK}/logs"
 check "is idempotent" bash "${MAKESTICK}" "${STICK}"
 
+# --- the image builder ----------------------------------------------------
+# It is the one privileged step in the project, so it must refuse clearly
+# rather than fail halfway through with a confusing losetup error.
+IMAGEBUILD="${REPO_ROOT}/build/make-stick-image.sh"
+check "image builder exists and is executable" test -x "${IMAGEBUILD}"
+if [ "$(id -u)" -ne 0 ]; then
+  check "image builder refuses to run without root" bash -c '! bash "$1" >/dev/null 2>&1' _ "${IMAGEBUILD}"
+  check "image builder names the command to re-run" bash -c 'bash "$1" 2>&1 | grep -q "sudo"' _ "${IMAGEBUILD}"
+fi
+
 # --- lint -----------------------------------------------------------------
 if command -v shellcheck >/dev/null 2>&1; then
   # -x so shellcheck follows the sourced manifest rather than reporting SC1091.
@@ -84,6 +94,7 @@ if command -v shellcheck >/dev/null 2>&1; then
   # source path in the script under test would resolve against the wrong dir.
   check "shellcheck: autorun" shellcheck -x --source-path="${REPO_ROOT}" -S style "${AUTORUN}"
   check "shellcheck: make-stick.sh" shellcheck -x --source-path="${REPO_ROOT}" -S style "${MAKESTICK}"
+  check "shellcheck: make-stick-image.sh" shellcheck -x --source-path="${REPO_ROOT}" -S style "${REPO_ROOT}/build/make-stick-image.sh"
 else
   fail_with "shellcheck clean" "shellcheck is not installed"
 fi
