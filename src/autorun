@@ -43,6 +43,8 @@ die() {
 
 IMAGE=""
 TARGET=""
+# Where the chosen target is recorded so it can cross the pipeline subshell.
+TARGET_FILE="$(mktemp -t haos-target.XXXXXX 2>/dev/null || printf '/tmp/haos-target.%s' "$$")"
 
 # --- preflight guards, in dependency order --------------------------------
 
@@ -387,6 +389,11 @@ run_selection() {
   fi
 
   [ -n "${TARGET}" ] || die "no disk was selected. Nothing was written."
+
+  # This function runs inside `main | tee`, which bash executes in a subshell,
+  # so assigning TARGET here is invisible to everything after the pipeline.
+  # Record it where the parent can read it instead.
+  printf '%s' "${TARGET}" > "${TARGET_FILE}"
   confirm_target "${TARGET}"
   require_block_device "${TARGET}"
   write_image "${TARGET}"
@@ -573,8 +580,11 @@ RUNLOG="$(mktemp -t haos-installer.XXXXXX)"
 main 2>&1 | tee "${RUNLOG}"
 rc="${PIPESTATUS[0]}"
 
+# Recover the chosen target from the subshell the pipeline ran main in.
+TARGET="$(cat "${TARGET_FILE}" 2>/dev/null || true)"
+
 persist_log "${RUNLOG}" "${rc}"
-rm -f "${RUNLOG}"
+rm -f "${RUNLOG}" "${TARGET_FILE}"
 
 # Only now, with the record safely on the stick, may the machine be powered
 # down. This ordering was learned the hard way: with the offer inside the run,

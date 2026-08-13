@@ -88,6 +88,34 @@ check "every reboot offer happens after the log is written" bash -c '
 check "no reboot is offered after a failed run" bash -c '
   grep -qE "rc\}\" -eq 0 \].*&&|\[ \"\$\{rc\}\" -eq 0 \]" "$1"' _ "${AUTORUN}"
 
+# --- the chosen target must survive the pipeline --------------------------
+# main runs inside `main | tee`, which bash executes in a subshell, so a
+# variable set there is invisible afterwards. That silently broke two things
+# at once: log files fell back to the "preflight" name, and the reboot offer
+# — guarded on the target being set — became unreachable. Observed in a real
+# run's log before it was noticed in the code.
+check "the target is passed out of the subshell, not by variable" grep -q 'TARGET_FILE' "${AUTORUN}"
+
+log_named() {   # log_named <target> -> basename written by persist_log
+  local t="$1"
+  bash -c '
+    . "$1" --source-only
+    BOOTMNT="$2"; TARGET="$3"
+    mkdir -p "$2/logs"
+    printf "run output\n" > "$2/run.txt"
+    persist_log "$2/run.txt" 0 >/dev/null 2>&1
+    find "$2/logs" -maxdepth 1 -type f -name "*.log" -printf "%f\n"
+  ' _ "${AUTORUN}" "${WORK}/named" "${t}" 2>&1
+}
+
+rm -rf "${WORK}/named"; mkdir -p "${WORK}/named"
+named="$(log_named /dev/vda)"
+check "names the log after the target when one was chosen" bash -c 'case "$1" in install-vda-*) exit 0;; *) exit 1;; esac' _ "${named}"
+
+rm -rf "${WORK}/named"; mkdir -p "${WORK}/named"
+unnamed="$(log_named '')"
+check "falls back to a preflight name when nothing was chosen" bash -c 'case "$1" in preflight-*) exit 0;; *) exit 1;; esac' _ "${unnamed}"
+
 # --- log naming -----------------------------------------------------------
 # The test laptop's clock runs weeks slow, so a timestamp alone cannot
 # distinguish runs. The target device is the part an operator can correlate.
