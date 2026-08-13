@@ -186,9 +186,73 @@ partition_table() {
   lsblk -no NAME,SIZE,FSTYPE,LABEL,MOUNTPOINT "$1" 2>/dev/null | sed 's/^/      /'
 }
 
+# --- arrow-key selection --------------------------------------------------
+
+# One keypress, normalised. Isolated in its own function so the list logic can
+# be tested without a pseudo-terminal.
+#
+# Emits: up | down | enter | digit:N | other | eof
+read_key() {
+  local k rest
+  IFS= read -rsn1 k || { printf 'eof\n'; return 0; }
+  case "${k}" in
+    '')    printf 'enter\n' ;;
+    $'\e')
+      # An escape byte alone is Esc; arrows send "\e[A" and friends. The short
+      # timeout is what tells them apart.
+      read -rsn2 -t 0.1 rest || rest=""
+      case "${rest}" in
+        '[A') printf 'up\n' ;;
+        '[B') printf 'down\n' ;;
+        *)    printf 'other\n' ;;
+      esac ;;
+    [0-9]) printf 'digit:%s\n' "${k}" ;;
+    *)     printf 'other\n' ;;
+  esac
+}
+
+# Draws the list with one row highlighted, redrawing in place as the operator
+# moves. Sets SELECTED, or leaves it empty if the input ends.
+select_from_list() {
+  local -a items=("$@")
+  local count="${#items[@]}" cur=0 drawn=0 key i
+
+  SELECTED=""
+  [ "${count}" -gt 0 ] || return 1
+
+  while :; do
+    # Redraw over the previous rendering rather than scrolling the console.
+    [ "${drawn}" -eq 1 ] && printf '\033[%dA' "$((count + 2))"
+
+    for i in "${!items[@]}"; do
+      if [ "${i}" -eq "${cur}" ]; then
+        printf '\033[K  \033[7m ▸ %d) %-58s\033[0m\n' "$((i + 1))" "${items[$i]}"
+      else
+        printf '\033[K      %d) %-58s\n' "$((i + 1))" "${items[$i]}"
+      fi
+    done
+    printf '\033[K\n'
+    printf '\033[K  Move with the arrow keys or press a number, then Enter to select.\n'
+    drawn=1
+
+    key="$(read_key)"
+    case "${key}" in
+      up)    [ "${cur}" -gt 0 ] && cur=$((cur - 1)) ;;
+      down)  [ "${cur}" -lt $((count - 1)) ] && cur=$((cur + 1)) ;;
+      digit:*)
+        local n="${key#digit:}"
+        if [ "${n}" -ge 1 ] && [ "${n}" -le "${count}" ]; then cur=$((n - 1)); fi ;;
+      enter) SELECTED="${items[$cur]}"; return 0 ;;
+      eof)   SELECTED=""; return 1 ;;
+      *)     : ;;
+    esac
+  done
+}
+
 # The operator types the device path back. A y/n prompt is answered by reflex;
 # a path has to be read first. That difference is the entire safety margin
-# between installing and destroying the wrong machine.
+# between installing and destroying the wrong machine — so arrow-key selection
+# replaces the *number typing*, never this step.
 confirm_target() {
   local dev="$1" answer
   say ""
@@ -305,16 +369,24 @@ run_selection() {
 
   # Never auto-select, not even the single-candidate case. A tool that decides
   # for you is one misplaced stick away from erasing the wrong machine.
-  printf '  Enter a number (1-%d): ' "${count}"
-  read -r choice || choice=""
+  if [ -t 0 ]; then
+    select_from_list "${candidates[@]}" ||
+      die "no disk was selected. Nothing was written."
+    TARGET="${SELECTED}"
+  else
+    # Piped input — no terminal to read arrow keys from. Kept so the flow can
+    # be driven non-interactively without pretending to be a console.
+    printf '  Enter a number (1-%d): ' "${count}"
+    read -r choice || choice=""
+    case "${choice}" in
+      ''|*[!0-9]*) die "'${choice}' is not a number. Nothing was written." ;;
+    esac
+    { [ "${choice}" -ge 1 ] && [ "${choice}" -le "${count}" ]; } ||
+      die "'${choice}' is not one of the offered disks (1-${count}). Nothing was written."
+    TARGET="${candidates[$((choice - 1))]}"
+  fi
 
-  case "${choice}" in
-    ''|*[!0-9]*) die "'${choice}' is not a number. Nothing was written." ;;
-  esac
-  { [ "${choice}" -ge 1 ] && [ "${choice}" -le "${count}" ]; } ||
-    die "'${choice}' is not one of the offered disks (1-${count}). Nothing was written."
-
-  TARGET="${candidates[$((choice - 1))]}"
+  [ -n "${TARGET}" ] || die "no disk was selected. Nothing was written."
   confirm_target "${TARGET}"
   require_block_device "${TARGET}"
   write_image "${TARGET}"
@@ -396,11 +468,19 @@ report_next_steps() {
   say "  2. Connect Ethernet before first boot. Home Assistant downloads its"
   say "     core on first start and cannot finish setup without internet."
   say ""
-  say "  3. First boot takes several minutes and the screen may sit idle while"
-  say "     it downloads. That is expected — do not power it off."
+  say "  3. First boot takes several minutes and the console will sit at a"
+  say "     'ha >' prompt looking idle. That is normal — it is downloading, and"
+  say "     there is no graphical setup on this machine. Leave it running."
   say ""
-  say "  4. Then reach it from another machine at:"
-  say "        http://homeassistant.local:8123"
+  say "  4. Finish setup from a BROWSER on another computer. Once booted, the"
+  say "     console prints the machine's address on its 'IPv4 addresses' line."
+  say "     Go to that address on port 8123, for example:"
+  say "        http://192.168.1.42:8123"
+  say ""
+  say "     The name http://homeassistant.local:8123 also works — but ONLY if"
+  say "     this is the only Home Assistant on the network. Every install"
+  say "     claims that same name, so on a network that already has one, the"
+  say "     name may reach the wrong machine. Use the IP address when in doubt."
   say ""
 }
 
