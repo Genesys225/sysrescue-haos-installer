@@ -56,7 +56,7 @@ targets.
 ## Building the stick
 
 ```bash
-git clone https://github.com/YOUR-USER/sysrescue-haos-installer
+git clone https://github.com/Genesys225/sysrescue-haos-installer
 cd sysrescue-haos-installer
 
 # 1. Fetch and verify SystemRescue + the Home Assistant OS image

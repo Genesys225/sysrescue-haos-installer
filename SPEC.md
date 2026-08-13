@@ -108,7 +108,7 @@ The harness discovers OVMF itself, copies a **private** `OVMF_VARS` into `tmp/` 
 ## Project Structure
 
 ```
-haos-usb-installer/
+sysrescue-haos-installer/
 ├── SPEC.md                  this document
 ├── CLAUDE.md                project rules; names tmp/ as the scratchpad
 ├── src/
