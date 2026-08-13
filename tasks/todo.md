@@ -51,11 +51,12 @@ Ordered by dependency. See [plan.md](plan.md) for strategy and risks.
   - ⚠️ **Before writing a single line of this task, neutralise the unit suite.** `tests/test-selection.sh` drives `run_selection` to completion, typing the confirmation, against candidate paths like `/dev/nvme0n1` — the disk holding `/` on this workstation. That is safe only while `write_image` is a stub; the moment it is real, running the suite would `dd` here. The unit harness must stub `write_image` itself.
   - **The real write is exercised in QEMU, not locally.** The Task 2 harness gives a qcow2 target on a virtio bus, so an actual `dd` inside the guest destroys nothing, and the whole path — boot, preflight, menu, typed confirmation, write — runs as the operator would experience it. The result can then be booted to prove it worked, which a loopback file cannot show.
   - Two layers, two reasons: the unit suite is stubbed because it runs on the workstation; the integration test is real because it runs sandboxed.
-  - Replace the stub: `xzcat "$img" | dd of="$dev" bs=4M conv=fsync oflag=direct status=progress`, retrying once without `oflag=direct` and logging the downgrade if the device rejects it. Then verify by re-streaming and comparing over the recorded uncompressed length, so the comparison stops at the image boundary instead of running into the larger disk.
-  - This is the only function in the codebase that writes to a block device.
-  - Acceptance: the QEMU target shows `hassos-boot` and `hassos-data` afterwards; verification passes; flipping a byte on the target makes verification fail.
-  - Verify: `lsblk` on the target image; deliberate corruption test.
-  - Files: `src/autorun`
+  - Replace the stub: `xzcat "$img" | dd of="$dev" bs=4M iflag=fullblock conv=fsync oflag=direct status=progress`, retrying once without `oflag=direct` and logging the downgrade if the device rejects it. Then verify by re-streaming and comparing over the uncompressed length, so the comparison stops at the image boundary instead of running into the larger disk.
+  - **`iflag=fullblock` is load-bearing and was missing from the original plan.** A pipe hands `dd` whatever the decompressor produced — often 8 KiB — and without it `dd` writes that short block and moves on. Measured: 210,021 partial writes instead of 468 full ones. Output was still byte-correct, but `oflag=direct` requires aligned transfers, so on real hardware the unaligned path is exactly what makes direct I/O fail.
+  - This is the only function in the codebase that writes to a block device, and `require_block_device` gates it.
+  - **Done, locally:** the real 18.2 image written through the real code path to a file target — 1,962,954,752 bytes, byte-exact, verification passed, and `partx` shows the correct HAOS layout (`hassos-boot`, `hassos-kernel0/1`, `hassos-system0/1`, `hassos-bootstate`, `hassos-overlay`, `hassos-data`). Corruption of a single byte, truncation, and trailing junk past the image end are all covered by unit tests.
+  - **Not yet proven:** behaviour against an actual block device (O_DIRECT on real hardware), and the full boot → preflight → menu → confirm → write path inside a guest. Both belong to the QEMU run.
+  - Files: `src/autorun`, `tests/test-write.sh`
 
 - [ ] **Task 8: Settle, log, report, offer reboot**
   - **Must `mount -o remount,rw /run/archiso/bootmnt` first** — Task 3 established the boot medium is mounted read-only, and the remount was verified working on real hardware. Without it the log silently fails to write.

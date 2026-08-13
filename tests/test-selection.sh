@@ -29,6 +29,15 @@ drive() {
     block_devices()   { cat "${FIXTURE}"; }
     list_candidates() { [ -n "${CANDS}" ] && printf "%s\n" ${CANDS}; return 0; }
     partition_table() { printf "      %s: 2 partitions, one labelled DATA\n" "$1"; }
+
+    # MANDATORY. This suite runs on the workstation, not in a VM, and it types
+    # confirmations at candidate paths like /dev/nvme0n1 — the disk holding /.
+    # Without this stub the write below would be real and would run here.
+    # The genuine write is exercised in QEMU, where the target is a qcow2 file.
+    write_image() { printf "  WOULD WRITE image %s to %s\n  (stubbed by the test harness)\n" "${IMAGE##*/}" "$1"; }
+    require_block_device() { :; }
+    verify_image() { :; }
+
     run_selection
   ' _ "${AUTORUN}" "${FIX}/${fixture}" "${candidates}" 2>&1
 }

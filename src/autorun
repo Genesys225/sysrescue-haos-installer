@@ -204,13 +204,75 @@ confirm_target() {
      Nothing was written. No disk has been modified."
 }
 
-# Placeholder until the write lands. Deliberately loud: a stub that looks like
-# success is how a half-finished installer gets trusted.
+# Last line of defence. Enumeration only ever offers block devices, so if a
+# non-device reaches here something upstream is broken — and the correct
+# response to a broken disk-selector is to stop, not to write somewhere else.
+require_block_device() {
+  [ -b "$1" ] || die "refusing to write to '$1': not a block device.
+     The disk list is built from the kernel's own block-device inventory, so
+     reaching this point means something upstream is wrong. Nothing has been
+     written. Report this rather than working around it."
+}
+
+# The uncompressed length, needed to bound verification. Without it the
+# comparison would run past the end of the image and into whatever the disk
+# held before — reporting a mismatch on a perfectly good write.
+image_uncompressed_bytes() {
+  xz --robot --list "$1" 2>/dev/null | awk '$1 == "file" { print $5 }'
+}
+
+# Streamed, never staged. The decompressed image is around 1.8 GiB and there
+# is nowhere sensible to put it: the boot medium is read-only and RAM is the
+# live system's.
 write_image() {
   local dev="$1"
   say ""
-  say "  WOULD WRITE image ${IMAGE##*/} to ${dev}"
-  say "  (stub — the write is not implemented yet, so nothing was written)"
+  say "  Writing ${IMAGE##*/} to ${dev}"
+  say "  This takes a few minutes. Do not power off or remove the stick."
+  say ""
+
+  # iflag=fullblock is not optional here. A pipe hands dd whatever the
+  # decompressor produced — often 8 KiB — and without it dd writes that short
+  # block and moves on, so bs=4M becomes a fiction: 210,000 partial writes
+  # instead of 468 full ones. O_DIRECT then fails on real hardware, because it
+  # requires aligned transfers.
+  if ! xzcat "${IMAGE}" | dd of="${dev}" bs=4M iflag=fullblock conv=fsync oflag=direct status=progress; then
+    # Some devices and filesystems reject O_DIRECT regardless. Falling back is
+    # correct, but it goes through the page cache, so the sync below matters.
+    say ""
+    say "  Direct I/O was refused by ${dev}; retrying through the page cache."
+    xzcat "${IMAGE}" | dd of="${dev}" bs=4M iflag=fullblock conv=fsync status=progress ||
+      die "the write to ${dev} failed partway through.
+     That disk now holds a partial image and must not be booted. Check the
+     stick and the target disk, then run the installer again."
+  fi
+
+  sync
+  say ""
+  say "  Write complete."
+}
+
+# Read it back and compare. A write that reports success and produces an
+# unbootable disk is the failure this exists to catch — cheap insurance
+# against a dying stick or a flaky USB bus.
+verify_image() {
+  local dev="$1" bytes
+  bytes="$(image_uncompressed_bytes "${IMAGE}")"
+  { [ -n "${bytes}" ] && [ "${bytes}" -gt 0 ]; } 2>/dev/null ||
+    die "could not determine the image's uncompressed size, so the write
+     cannot be verified. Treat ${dev} as unproven."
+
+  say ""
+  say "  Verifying ${bytes} bytes against the image..."
+
+  if xzcat "${IMAGE}" | cmp -n "${bytes}" - "${dev}"; then
+    say "  Verification passed — ${dev} matches the image exactly."
+  else
+    die "VERIFICATION MISMATCH — ${dev} does not match the image.
+     Do not boot this machine from that disk. The most likely causes are a
+     failing stick or a failing target disk. Run the installer again; if it
+     mismatches twice, replace the hardware rather than retrying."
+  fi
 }
 
 run_selection() {
@@ -254,7 +316,9 @@ run_selection() {
 
   TARGET="${candidates[$((choice - 1))]}"
   confirm_target "${TARGET}"
+  require_block_device "${TARGET}"
   write_image "${TARGET}"
+  verify_image "${TARGET}"
 }
 
 # --- report ---------------------------------------------------------------
