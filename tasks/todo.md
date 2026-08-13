@@ -16,7 +16,13 @@ Ordered by dependency. See [plan.md](plan.md) for strategy and risks.
   - **Acceptance partially deferred, by necessity.** The written criterion was that `/sys/firmware/efi` exists under UEFI and not under `--legacy`. That cannot be checked from outside the guest, and both modes render an identical console, so a screenshot cannot distinguish them. Confirming it requires running a command *inside* the guest — which is exactly what Task 3's skeleton does, and its spec already calls for dumping whether `/sys/firmware/efi` exists. **The firmware-mode assertion is therefore verified in Task 3, not here.** What Task 2 proves is that the harness assembles a correct command line and that both modes boot.
   - Files: `tests/qemu-boot.sh`, `tests/test-qemu-harness.sh`
 
-- [ ] **Task 3: Walking skeleton — prove the drop-in mechanism** ⛳ CHECKPOINT
+- [x] **Task 3: Walking skeleton — prove the drop-in mechanism** ⛳ CHECKPOINT — **PASSED on hardware** (laptop, 2026‑07‑23 per that machine's clock, which runs ~3 weeks slow). Evidence recovered from the stick at `logs/sysrescue-autorun.log`.
+  - `Using autorun scripts from /run/archiso/bootmnt/autorun` → `executing 1000-autorun` → our banner → `Execution of 1000-autorun returned 0`. Zero operator input.
+  - **The FAT32 exec-bit risk never existed.** SystemRescue does not execute the script in place: it copies it to `/var/autorun/tmp/autorun`, runs it there at mode `755`, then deletes it. The filesystem's inability to store an exec bit is irrelevant by construction. `shell: true` and `sysrescue-customize` are not needed — the whole escalation ladder is moot.
+  - **Boot medium is mounted read-only:** `vfat ro,relatime,fmask=0022,...`. The skeleton's write probe caught it, and the report could not be written. `mount -o remount,rw /run/archiso/bootmnt` was verified working on that hardware — **Task 8 must remount before logging.**
+  - **That laptop booted legacy BIOS/CSM, not UEFI.** Task 4's `require_uefi` will correctly refuse to install on it as configured. Its firmware needs changing before Task 10.
+  - Discharges half of Task 2's deferred assertion: firmware-mode detection is now confirmed from inside a guest, for the legacy case. The UEFI case is proven in QEMU but not yet from inside.
+  - Files: `build/make-stick.sh`, `src/500-haos.yaml`, `src/autorun`
   - `make-stick.sh` creates `haos/`, `sysrescue.d/`, `logs/` on a prepared stick and copies in the drop-ins plus payload. `500-haos.yaml` sets the `autorun` scope to run without waiting (`ar_nowait`, `wait: never`, `on_error: break`) and leaves the GUI off. `autorun` at this stage only prints a banner and dumps three facts: whether `/sys/firmware/efi` exists, what `/run/archiso/bootmnt` contains, and its own permission bits.
   - **Deliberately not setting `copytoram`** — the stick must stay mounted so Task 8 can write logs back to it.
   - Acceptance: the banner appears on console with zero operator input.
@@ -51,7 +57,9 @@ Ordered by dependency. See [plan.md](plan.md) for strategy and risks.
   - Files: `src/autorun`
 
 - [ ] **Task 8: Settle, log, report, offer reboot**
+  - **Must `mount -o remount,rw /run/archiso/bootmnt` first** — Task 3 established the boot medium is mounted read-only, and the remount was verified working on real hardware. Without it the log silently fails to write.
   - `sync` and `partprobe`, print the resulting partition table, tee the whole run to `logs/install-<UTC>-<target>.log` on the stick, then print next steps: remove the USB, first boot needs Ethernet and internet, reach `http://homeassistant.local:8123`. Offer reboot or poweroff with neither as default.
+  - Log filenames must not assume a correct clock: the test laptop's was three weeks slow. Include the target device in the name so runs stay distinguishable regardless.
   - Acceptance: the log survives stick removal and is readable from the workstation; nothing reboots on its own.
   - Verify: run in QEMU, then mount the stick image and read the log.
   - Files: `src/autorun`

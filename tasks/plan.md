@@ -39,7 +39,8 @@ The workstation itself is protected structurally rather than by care: the instal
 
 | Risk | Likelihood | Mitigation |
 |---|---|---|
-| FAT32 exec bit blocks `autorun` | Medium | Task 3 detects it immediately; fall back to `shell: true` in the YAML scope, then to `sysrescue-customize` `iso_add/` |
+| ~~FAT32 exec bit blocks `autorun`~~ | **Resolved — never a risk** | SystemRescue copies the script to `/var/autorun/tmp/` and runs it there at 755. It never executes from the stick, so the filesystem's permission model is irrelevant. Neither fallback is needed. |
+| Boot medium mounted read-only | **Confirmed real** | Found by Task 3's write probe: `vfat ro,relatime`. `remount,rw` works; Task 8 must do it before logging |
 | QEMU USB passthrough of the physical stick is flaky or permission-bound | Medium | Image the stick to a file (`dd if=/dev/sdb of=tmp/stick.img` — read-only on the stick) and attach the file instead |
 | OVMF firmware path/package differs on this workstation | High | Resolved in Task 2 before anything depends on it; paths recorded in `tests/qemu-boot.sh` |
 | `oflag=direct` unsupported on some target devices | Low | Detect write failure and retry once without `oflag=direct`, logging the downgrade |
