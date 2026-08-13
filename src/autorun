@@ -376,24 +376,45 @@ run_selection() {
   fi
 
   say ""
-  say "  Select the disk to install Home Assistant OS onto:"
+  say "  Disks this machine will accept an install onto:"
   say ""
+
+  # Contents first, unnumbered, so the operator can work out which disk is
+  # which. The numbered list below is for choosing; repeating numbers in both
+  # places just invites picking from the wrong one.
+  local labels=()
   for dev in "${candidates[@]}"; do
-    say "   ${i}) ${dev}  $(printf '%s\n' "${inventory}" | describe_device "${dev}")"
+    local desc
+    desc="$(printf '%s\n' "${inventory}" | describe_device "${dev}")"
+    labels+=("${dev}  ${desc}")
+    say "  ${dev} — ${desc}"
     partition_table "${dev}"
     say ""
     i=$((i + 1))
   done
 
+  say "  Select the disk to install Home Assistant OS onto:"
+  say ""
+
   # Never auto-select, not even the single-candidate case. A tool that decides
   # for you is one misplaced stick away from erasing the wrong machine.
   if [ -t 0 ]; then
-    select_from_list "${candidates[@]}" ||
+    # Rows carry size, model and bus so the highlighted line is self-describing
+    # — the operator should not have to look back up the screen to see what
+    # they are about to erase.
+    select_from_list "${labels[@]}" ||
       die "no disk was selected. Nothing was written."
-    TARGET="${SELECTED}"
+    TARGET="${SELECTED%% *}"
   else
     # Piped input — no terminal to read arrow keys from. Kept so the flow can
-    # be driven non-interactively without pretending to be a console.
+    # be driven non-interactively without pretending to be a console. The list
+    # is numbered here because there is no highlight to point at instead.
+    local n=1
+    for dev in "${labels[@]}"; do
+      say "   ${n}) ${dev}"
+      n=$((n + 1))
+    done
+    say ""
     printf '  Enter a number (1-%d): ' "${count}"
     read -r choice || choice=""
     case "${choice}" in
