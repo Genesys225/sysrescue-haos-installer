@@ -23,7 +23,7 @@ Ordered by dependency. See [plan.md](plan.md) for strategy and risks.
   - **Deliberately not setting `copytoram`** — the stick must stay mounted so Task 8 can write logs back to it.
   - Acceptance: the banner appears on console with zero operator input.
   - Verify: boot in QEMU. If it does not run, read the permission bits from the dump — a missing exec bit means FAT32 stripped it, and the fix is `shell: true` in the autorun scope.
-  - **Stop here.** If the mechanism does not work and `shell: true` does not rescue it, the SystemRescue base choice reopens and the rest of this plan is void.
+  - **Stop here.** Escalation order if it does not run: `shell: true` in the autorun scope, then `sysrescue-customize` with the same files in `iso_add/` (costs a build step, keeps the design — see [prior-art.md](../docs/prior-art.md)). The base choice only reopens if all three fail.
   - Files: `build/make-stick.sh`, `src/500-haos.yaml`, `src/autorun`
 
 - [ ] **Task 4: Preflight guards**

@@ -12,6 +12,8 @@ So Task 3 is a **walking skeleton**: a stick whose `autorun` prints one line and
 
 There is a specific reason to doubt the mechanism: **FAT32 cannot store a POSIX executable bit.** SystemRescue must be compensating somewhere — a mount umask, or the autorun runner invoking the interpreter explicitly. Whether that compensation exists is unknown to us, and the skeleton is what answers it. If the exec bit turns out to be the blocker, the `shell: true` key in the `autorun` YAML scope is the intended escape hatch.
 
+**A drop-in failure is not fatal to the design.** Per [prior-art.md](../docs/prior-art.md), `sysrescue-customize` bakes the same two files into a custom ISO via its `iso_add/` stage, needing only `xorriso` and `mksquashfs`. So the worst case at Task 3 is that we acquire a build step, not that we lose the base. Drop-in remains first choice because upstream names the writable-stick method as recommended, and because it keeps a HAOS version bump down to swapping one file.
+
 ## Dependency graph
 
 ```
@@ -37,7 +39,7 @@ The workstation itself is protected structurally rather than by care: the instal
 
 | Risk | Likelihood | Mitigation |
 |---|---|---|
-| FAT32 exec bit blocks `autorun` | Medium | Task 3 detects it immediately; fall back to `shell: true` in the YAML scope |
+| FAT32 exec bit blocks `autorun` | Medium | Task 3 detects it immediately; fall back to `shell: true` in the YAML scope, then to `sysrescue-customize` `iso_add/` |
 | QEMU USB passthrough of the physical stick is flaky or permission-bound | Medium | Image the stick to a file (`dd if=/dev/sdb of=tmp/stick.img` — read-only on the stick) and attach the file instead |
 | OVMF firmware path/package differs on this workstation | High | Resolved in Task 2 before anything depends on it; paths recorded in `tests/qemu-boot.sh` |
 | `oflag=direct` unsupported on some target devices | Low | Detect write failure and retry once without `oflag=direct`, logging the downgrade |
@@ -48,7 +50,7 @@ The workstation itself is protected structurally rather than by care: the instal
 
 Three points where work stops until something is proven:
 
-- **After Task 3** — the drop-in mechanism is confirmed working, or the base choice is reopened.
+- **After Task 3** — the drop-in mechanism is confirmed working, or we fall back to a baked ISO via `sysrescue-customize` and absorb a build step.
 - **After Task 7** — a QEMU target disk carries a bootable HAOS, verified byte-for-byte.
 - **After Task 9** — a virtual machine reaches HA onboarding unattended-to-the-prompt.
 
