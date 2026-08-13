@@ -53,23 +53,27 @@ A reusable USB stick that boots a bare x86-64 machine into a live environment an
 >
 > Rule of thumb: `dd` never touches the stick, and is the only thing that touches the target.
 
-**FAT32 caps a single file at 4 GB.** This is independent of stick capacity — a 64 GB stick does not help. The expanded HAOS image can therefore never exist as a file on the stick, so the write is always a stream: `xzcat … | dd`. Only the 552 MB compressed file lives on FAT32.
+**The write is streamed: `xzcat … | dd`.** Only the 552 MB compressed file ever lives on the stick; the expanded image is never materialised anywhere.
 
-A third, smaller one: the volume label must match the release (`RESCUE1302`) or the stick won't boot. A SystemRescue bump is a full stick rewrite; a HAOS bump is a file swap.
+> **Correction (Task 1).** This was originally justified by FAT32's 4 GB per-file ceiling, on the assumption that the expanded image would exceed it. Measured: the HAOS 18.2 generic x86-64 image is **1 962 954 752 bytes (1.83 GiB)** uncompressed — comfortably *under* the cap. It would fit as a file. Streaming is still correct, but for a weaker reason: it avoids a pointless 1.83 GiB intermediate write to slow flash, and keeps the stick's contents to one file per HAOS version. This is a preference, not a hard constraint, and should not be defended as one.
+
+The volume label must match the release (`RESCUE1302`) or the stick won't boot. A SystemRescue bump is a full stick rewrite; a HAOS bump is a file swap.
+
+**Measured artifact sizes** (Task 1): SystemRescue ISO **1.3 GB**, HAOS image **552 MB** compressed / **1.83 GiB** expanded. Roughly 1.9 GB of stick space in use.
 
 ## Commands
 
 **Build the stick** (from this workstation):
 
 ```bash
-# 1. Fetch SystemRescue and verify against the published checksum
-curl -LO https://sourceforge.net/projects/systemrescuecd/files/sysresccd-x86/13.02/systemrescue-13.02-amd64.iso
-sha256sum -c systemrescue-13.02-amd64.iso.sha256
+# 1. Fetch and measure the artifacts (idempotent, resumable)
+./build/fetch-artifacts.sh
+./tests/run.sh                     # proves they are present and intact
 
 # 2. Create a WRITABLE stick — never by image-copying the ISO
 curl -LO https://fastly-cdn.system-rescue.org/download/usbwriter/1.1.1/sysrescueusbwriter-x86_64.AppImage
 chmod 755 sysrescueusbwriter-x86_64.AppImage
-./sysrescueusbwriter-x86_64.AppImage systemrescue-13.02-amd64.iso
+./sysrescueusbwriter-x86_64.AppImage tmp/systemrescue-13.02-amd64.iso
 #   text-UI: lists USB devices, you pick one; self-escalates via sudo/pkexec/su
 #   result: FAT32, label RESCUE1302, writable
 
@@ -77,15 +81,9 @@ chmod 755 sysrescueusbwriter-x86_64.AppImage
 ./build/make-stick.sh /media/$USER/RESCUE1302
 ```
 
-**Fetch the HAOS payload:**
+Versions and URLs live in **`build/artifacts.conf`** and nowhere else — the fetch script, the tests, and the stick builder all read from it, so a version bump is a one-line edit. The volume label is derived from the version there so the two cannot drift apart.
 
-```bash
-curl -L -o tmp/haos_generic-x86-64-18.2.img.xz \
-  https://github.com/home-assistant/operating-system/releases/download/18.2/haos_generic-x86-64-18.2.img.xz
-sha256sum tmp/haos_generic-x86-64-18.2.img.xz > tmp/haos_generic-x86-64-18.2.img.xz.sha256
-```
-
-**Lint:** `shellcheck -S style src/autorun build/make-stick.sh`
+**Lint:** `shellcheck -S style src/autorun build/*.sh tests/*.sh`
 
 **Test (QEMU, nothing real at risk):**
 
@@ -243,7 +241,7 @@ Coverage expectation: **every `die()` path in preflight has a negative test.** T
 ## Open Questions
 
 1. **Does SystemRescue 13.02 ship `dialog`?** Spec assumes plain `read` to avoid the dependency. Confirm at build; if `dialog` is present, it's a cosmetic upgrade, not a design change.
-2. **Does HA publish an upstream checksum for `img.xz`?** If not, the sidecar is self-generated at build time — which still catches stick rot but does not authenticate the download. Worth resolving before trusting the stick to a client machine.
+2. ~~**Does HA publish an upstream checksum for `img.xz`?**~~ **Answered: no.** The 18.2 release carries 35 assets and not one is a digest. The sidecar is self-generated at fetch time, so it detects corruption and stick rot but does **not** authenticate the download — the only integrity guarantee on the HAOS image is TLS to GitHub at fetch time. Worth weighing before this stick touches a client machine.
 3. **Multiple HAOS versions per stick** — capacity allows it easily. v1 deliberately fails if more than one image is present. Revisit if it turns out to matter.
 
 **Resolved:** the stick writer is `sysrescueusbwriter-x86_64.AppImage` v1.1.1, not the legacy `usb_inst.sh`. Verify the label it produces is `RESCUE1302` before dropping files in — the label is a boot requirement, not cosmetic.

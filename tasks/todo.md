@@ -6,7 +6,7 @@ Ordered by dependency. See [plan.md](plan.md) for strategy and risks.
 
 ---
 
-- [ ] **Task 1: Acquire and verify artifacts**
+- [x] **Task 1: Acquire and verify artifacts** — done. ISO verified against upstream sha256; HAOS sidecar self-generated (upstream publishes none); uncompressed length measured at 1 962 954 752 bytes. Test suite `tests/run.sh` — 10 assertions, all green.
   - Fetch SystemRescue 13.02 ISO, verify against the published sha256. Fetch HAOS 18.2 `img.xz`, generate the sidecar checksum, and record the uncompressed length via `xz --robot --list` (Task 7's verification needs that number).
   - Acceptance: both artifacts in `tmp/`, ISO checksum verified against upstream, HAOS sidecar generated, uncompressed byte count recorded.
   - Verify: `sha256sum -c` passes for both; `xz -l` reports a plausible size.
