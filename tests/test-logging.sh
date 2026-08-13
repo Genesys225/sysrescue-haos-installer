@@ -24,11 +24,13 @@ make_bootmnt() {
 
 logs_in() { find "$1/logs" -maxdepth 1 -type f -name '*.log' 2>/dev/null; }
 
-# --- successful run -------------------------------------------------------
+# --- a run that gets as far as target selection ---------------------------
+# Stdin is closed on purpose. This suite must never answer a confirmation
+# prompt: the write behind it becomes real in Task 7, and a test that types
+# the magic words at it would erase one of this machine's disks.
 make_bootmnt "${WORK}"
-bash "${AUTORUN}" --bootmnt "${WORK}" --efi-path "${WORK}/efi" >/dev/null 2>&1
-rc=$?
-check "successful run still exits 0" test "${rc}" -eq 0
+bash "${AUTORUN}" --bootmnt "${WORK}" --efi-path "${WORK}/efi" >/dev/null 2>&1 < /dev/null
+check "an aborted run is still logged" bash -c '[ -n "$(find "$1/logs" -maxdepth 1 -type f -name "*.log" 2>/dev/null)" ]' _ "${WORK}"
 check "writes a log to the boot medium" bash -c '[ -n "$(find "$1/logs" -maxdepth 1 -type f -name "*.log" 2>/dev/null)" ]' _ "${WORK}"
 check "log names the host" bash -c 'grep -qi "$(uname -n)" $(find "$1/logs" -type f -name "*.log")' _ "${WORK}"
 check "log contains the report" bash -c 'grep -qi "firmware" $(find "$1/logs" -type f -name "*.log")' _ "${WORK}"

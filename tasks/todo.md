@@ -41,14 +41,14 @@ Ordered by dependency. See [plan.md](plan.md) for strategy and risks.
   - An unresolvable boot device yields an empty exclusion rather than a guessed one: excluding nothing is recoverable, excluding the wrong thing is not.
   - Files: `src/autorun`, `tests/test-enumerate.sh`, `tests/fixtures/lsblk-*.txt`
 
-- [ ] **Task 6: Selection and typed confirmation** (still non-destructive)
-  - Numbered menu showing size, model, transport, and each disk's existing partitions and labels. Zero candidates is a hard stop. Never auto-select, including when exactly one candidate exists. `confirm_target` requires the exact device path.
-  - The write function is a **stub that prints what it would do** — nothing is destructive until Task 7.
-  - Acceptance: a mistyped confirmation exits non-zero and the stub is never reached; a correct one reaches the stub.
-  - Verify: QEMU run exercising both paths; `shellcheck -S style` clean.
-  - Files: `src/autorun`
+- [x] **Task 6: Selection and typed confirmation** — done, still non-destructive. 22 assertions in `tests/test-selection.sh`. Menu shows size, model, transport and each disk's existing partitions; zero candidates is a hard stop that explains why; a single candidate is still presented as a menu rather than assumed.
+  - Every rejection path is asserted to leave the stub unreached: bare `y`, another disk's path, an empty answer, and menu inputs `0`, `99`, `abc`, empty.
+  - Blank entries are filtered out of the candidate array. An empty string there would render as a menu row with no device *and* match an empty confirmation — the one input an operator can produce by pressing Return twice.
+  - Two test-harness bugs found and fixed here, both of the kind that make a suite pass while testing nothing: stub functions referencing `$2` were reading their own arguments rather than the script's, and an empty candidate list was being emitted as one blank line, so the zero-candidate case never occurred.
+  - Files: `src/autorun`, `tests/test-selection.sh`
 
 - [ ] **Task 7: Streamed write and verification** ⛳ CHECKPOINT
+  - ⚠️ **Before writing a single line of this task, neutralise the test suite.** `tests/test-selection.sh` drives `run_selection` to completion, typing the confirmation, against candidate paths like `/dev/nvme0n1` — which on this workstation is the disk holding `/`. That is safe only while `write_image` is a stub. The moment it becomes real, running the suite would erase this machine. The harness must stub `write_image` itself, and the real write must be exercised separately against a loopback file, never a device path the suite invents.
   - Replace the stub: `xzcat "$img" | dd of="$dev" bs=4M conv=fsync oflag=direct status=progress`, retrying once without `oflag=direct` and logging the downgrade if the device rejects it. Then verify by re-streaming and comparing over the recorded uncompressed length, so the comparison stops at the image boundary instead of running into the larger disk.
   - This is the only function in the codebase that writes to a block device.
   - Acceptance: the QEMU target shows `hassos-boot` and `hassos-data` afterwards; verification passes; flipping a byte on the target makes verification fail.

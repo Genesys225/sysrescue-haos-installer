@@ -34,10 +34,14 @@ run_guarded() {
 }
 
 # --- happy path -----------------------------------------------------------
+# Preflight passing no longer means the run exits 0 — it now hands off to
+# target selection, which needs an operator. Passing means reaching that
+# handoff. Stdin stays closed here deliberately: this suite must never drive
+# a confirmation, because the write behind it stops being a stub in Task 7.
 make_bootmnt "${WORK}"
 run_guarded "${WORK}"
-check "passes preflight when everything is in order" test $? -eq 0
-check "still reports the skeleton facts" grep -qi 'firmware' "${OUT}"
+check "reaches target selection when everything is in order" grep -qi 'select the disk' "${OUT}"
+check "still reports the facts it gathered" grep -qi 'firmware' "${OUT}"
 
 # --- require_bootmnt ------------------------------------------------------
 # Must be provably absent. An earlier version of the script created this path

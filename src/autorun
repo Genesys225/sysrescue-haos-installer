@@ -42,6 +42,7 @@ die() {
 }
 
 IMAGE=""
+TARGET=""
 
 # --- preflight guards, in dependency order --------------------------------
 
@@ -176,6 +177,86 @@ list_candidates() {
   block_devices | filter_candidates "$(boot_disk)"
 }
 
+# --- target selection -----------------------------------------------------
+
+# What is already on a disk, so the operator can recognise it. Someone who
+# cannot tell which disk is which from a model number usually can from
+# "500G, NTFS, labelled Windows".
+partition_table() {
+  lsblk -no NAME,SIZE,FSTYPE,LABEL,MOUNTPOINT "$1" 2>/dev/null | sed 's/^/      /'
+}
+
+# The operator types the device path back. A y/n prompt is answered by reflex;
+# a path has to be read first. That difference is the entire safety margin
+# between installing and destroying the wrong machine.
+confirm_target() {
+  local dev="$1" answer
+  say ""
+  say "  About to ERASE ${dev}"
+  say "  Everything on it is destroyed, including any operating system already"
+  say "  installed. This cannot be undone."
+  say ""
+  printf '  Type the device path exactly to confirm: '
+  read -r answer || answer=""
+
+  [ "${answer}" = "${dev}" ] ||
+    die "confirmation did not match — you typed '${answer}', the target is '${dev}'.
+     Nothing was written. No disk has been modified."
+}
+
+# Placeholder until the write lands. Deliberately loud: a stub that looks like
+# success is how a half-finished installer gets trusted.
+write_image() {
+  local dev="$1"
+  say ""
+  say "  WOULD WRITE image ${IMAGE##*/} to ${dev}"
+  say "  (stub — the write is not implemented yet, so nothing was written)"
+}
+
+run_selection() {
+  local inventory count choice dev i=1
+  local candidates=()
+
+  inventory="$(block_devices)"
+  # Drop blank lines rather than trusting the producer. An empty string in
+  # this array would render as a menu entry with no device, and confirming it
+  # would match — a path to running the write against nothing, or worse.
+  mapfile -t candidates < <(list_candidates | grep -v '^[[:space:]]*$')
+  count="${#candidates[@]}"
+
+  if [ "${count}" -eq 0 ]; then
+    die "no installable disk found on this machine.
+     Every block device here is removable, USB, or the medium this installer
+     booted from — none of them is a safe place for an internal install.
+     Check that the target drive is connected and visible in firmware setup."
+  fi
+
+  say ""
+  say "  Select the disk to install Home Assistant OS onto:"
+  say ""
+  for dev in "${candidates[@]}"; do
+    say "   ${i}) ${dev}  $(printf '%s\n' "${inventory}" | describe_device "${dev}")"
+    partition_table "${dev}"
+    say ""
+    i=$((i + 1))
+  done
+
+  # Never auto-select, not even the single-candidate case. A tool that decides
+  # for you is one misplaced stick away from erasing the wrong machine.
+  printf '  Enter a number (1-%d): ' "${count}"
+  read -r choice || choice=""
+
+  case "${choice}" in
+    ''|*[!0-9]*) die "'${choice}' is not a number. Nothing was written." ;;
+  esac
+  { [ "${choice}" -ge 1 ] && [ "${choice}" -le "${count}" ]; } ||
+    die "'${choice}' is not one of the offered disks (1-${count}). Nothing was written."
+
+  TARGET="${candidates[$((choice - 1))]}"
+  confirm_target "${TARGET}"
+  write_image "${TARGET}"
+}
+
 # --- report ---------------------------------------------------------------
 
 gather() {
@@ -270,22 +351,7 @@ main() {
   gather
   report
 
-  local inventory candidates
-  inventory="$(block_devices)"
-  candidates="$(printf '%s\n' "${inventory}" | filter_candidates "$(boot_disk)")"
-
-  say "  Installable disks found:"
-  if [ -z "${candidates}" ]; then
-    say "    (none)"
-  else
-    while IFS= read -r dev; do
-      [ -n "${dev}" ] || continue
-      say "    ${dev}  $(printf '%s\n' "${inventory}" | describe_device "${dev}")"
-    done <<< "${candidates}"
-  fi
-  say ""
-
-  say "  Preflight complete. No disk has been touched."
+  run_selection
 }
 
 # Sourced by the test suite to reach the functions above without running the
