@@ -42,7 +42,16 @@ A reusable USB stick that boots a bare x86-64 machine into a live environment an
 
 ### Two constraints that drive the whole design
 
-**The stick must be writable.** `dd`-ing the SystemRescue ISO produces a read-only ISO9660 medium, which kills the drop-in premise entirely. The stick is created with SystemRescue's USB writer (Linux) or **Rufus in ISO mode** (Windows), both of which yield FAT32.
+**The stick must be writable.** Image-copying the SystemRescue ISO byte-for-byte produces a read-only ISO9660 medium, which kills the drop-in premise entirely. The stick is created with **`sysrescueusbwriter`** (Linux, AppImage) or **Rufus in ISO mode** (Windows), both of which yield writable FAT32.
+
+> **The two `dd`s — do not conflate them.** This project both bans and requires `dd`, in different places:
+>
+> | Context | Verdict |
+> |---|---|
+> | Creating the SystemRescue stick | **Banned.** Read-only medium → drop-ins impossible → design fails |
+> | Writing HAOS to the target disk | **Required.** `xzcat … \| dd of=/dev/nvme0n1` *is* the install |
+>
+> Rule of thumb: `dd` never touches the stick, and is the only thing that touches the target.
 
 **FAT32 caps a single file at 4 GB.** This is independent of stick capacity — a 64 GB stick does not help. The expanded HAOS image can therefore never exist as a file on the stick, so the write is always a stream: `xzcat … | dd`. Only the 552 MB compressed file lives on FAT32.
 
@@ -57,9 +66,12 @@ A third, smaller one: the volume label must match the release (`RESCUE1302`) or 
 curl -LO https://sourceforge.net/projects/systemrescuecd/files/sysresccd-x86/13.02/systemrescue-13.02-amd64.iso
 sha256sum -c systemrescue-13.02-amd64.iso.sha256
 
-# 2. Create a WRITABLE stick — never dd
-sudo mount -o loop,ro systemrescue-13.02-amd64.iso /mnt/iso
-sudo /mnt/iso/usb_inst.sh          # interactive; select the target stick
+# 2. Create a WRITABLE stick — never by image-copying the ISO
+curl -LO https://fastly-cdn.system-rescue.org/download/usbwriter/1.1.1/sysrescueusbwriter-x86_64.AppImage
+chmod 755 sysrescueusbwriter-x86_64.AppImage
+./sysrescueusbwriter-x86_64.AppImage systemrescue-13.02-amd64.iso
+#   text-UI: lists USB devices, you pick one; self-escalates via sudo/pkexec/su
+#   result: FAT32, label RESCUE1302, writable
 
 # 3. Drop in the payload
 ./build/make-stick.sh /media/$USER/RESCUE1302
@@ -232,5 +244,6 @@ Coverage expectation: **every `die()` path in preflight has a negative test.** T
 
 1. **Does SystemRescue 13.02 ship `dialog`?** Spec assumes plain `read` to avoid the dependency. Confirm at build; if `dialog` is present, it's a cosmetic upgrade, not a design change.
 2. **Does HA publish an upstream checksum for `img.xz`?** If not, the sidecar is self-generated at build time — which still catches stick rot but does not authenticate the download. Worth resolving before trusting the stick to a client machine.
-3. **Is the USB writer on the ISO named `usb_inst.sh`?** Verify when the ISO is first mounted; the command in Build assumes it.
-4. **Multiple HAOS versions per stick** — capacity allows it easily. v1 deliberately fails if more than one image is present. Revisit if it turns out to matter.
+3. **Multiple HAOS versions per stick** — capacity allows it easily. v1 deliberately fails if more than one image is present. Revisit if it turns out to matter.
+
+**Resolved:** the stick writer is `sysrescueusbwriter-x86_64.AppImage` v1.1.1, not the legacy `usb_inst.sh`. Verify the label it produces is `RESCUE1302` before dropping files in — the label is a boot requirement, not cosmetic.
