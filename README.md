@@ -115,28 +115,19 @@ touched:
 
 ### Choosing a disk
 
-```
-  ▸ 1) /dev/nvme0n1  931.5G  Example NVMe Plus 1TB  [nvme]
-    2) /dev/sda      894.3G  EXAMPLE SATA SSD 960G   [sata]
+![Preflight output and the disk list](docs/screenshot-menu.png)
 
-  Arrow keys or a number to move, Enter to select, Esc to abort.
-```
-
-Each disk also lists its existing partitions and labels, because a model
-number alone is rarely enough to tell two disks apart — but "500G, NTFS,
-labelled Windows" usually is.
+Each disk is listed once with its existing partitions and labels — a model
+number alone is rarely enough to tell two disks apart, but "500G, NTFS,
+labelled Windows" usually is. The highlighted row repeats the size, model and
+bus, so what you are about to erase is readable without looking back up the
+screen.
 
 Nothing is auto-selected, even when there is only one candidate.
 
 ### Confirming
 
-```
-  About to ERASE /dev/nvme0n1
-  Everything on it is destroyed, including any operating system already
-  installed. This cannot be undone.
-
-  Enter to confirm, Esc to abort:
-```
+![The confirmation prompt](docs/screenshot-confirm.png)
 
 Enter confirms, Esc aborts, and any other key is ignored rather than treated
 as an answer.
