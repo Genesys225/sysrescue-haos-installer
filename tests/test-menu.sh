@@ -78,6 +78,17 @@ check "shows every candidate" bash -c 'grep -q "/dev/sda" <<< "$1" && grep -q "/
 check "marks the highlighted row" grep -qE '[>*▸]|\[x\]' <<< "${out}"
 check "explains how to move" grep -qi 'arrow\|↑\|move' <<< "${out}"
 
+# --- aborting from the list -----------------------------------------------
+# Esc must work at this step too, not only at the confirmation. It was shown
+# at the second prompt and silently ignored here.
+out="$(pick escape)"
+check "escape abandons the list" grep -q 'CHOSE=none' <<< "${out}"
+
+out="$(pick down escape)"
+check "escape abandons after moving" grep -q 'CHOSE=none' <<< "${out}"
+
+check "the hint names the abort key" grep -qi 'esc to abort' <<< "$(pick enter)"
+
 # --- read_key exists and is replaceable -----------------------------------
 check "key reading is isolated in read_key" grep -q '^read_key()' "${AUTORUN}"
 check "selection is isolated in select_from_list" grep -q '^select_from_list()' "${AUTORUN}"

@@ -235,7 +235,7 @@ select_from_list() {
       fi
     done
     printf '\033[K\n'
-    printf '\033[K  Move with the arrow keys or press a number, then Enter to select.\n'
+    printf '\033[K  Arrow keys or a number to move, Enter to select, Esc to abort.\n'
     drawn=1
 
     key="$(read_key)"
@@ -245,9 +245,10 @@ select_from_list() {
       digit:*)
         local n="${key#digit:}"
         if [ "${n}" -ge 1 ] && [ "${n}" -le "${count}" ]; then cur=$((n - 1)); fi ;;
-      enter) SELECTED="${items[$cur]}"; return 0 ;;
-      eof)   SELECTED=""; return 1 ;;
-      *)     : ;;
+      enter)  SELECTED="${items[$cur]}"; return 0 ;;
+      escape) SELECTED=""; return 1 ;;
+      eof)    SELECTED=""; return 1 ;;
+      *)      : ;;
     esac
   done
 }
