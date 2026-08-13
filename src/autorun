@@ -393,7 +393,8 @@ run_selection() {
   verify_image "${TARGET}"
   settle_target "${TARGET}"
   report_next_steps "${TARGET}"
-  offer_reboot
+  # The reboot offer deliberately lives outside this function — see the note
+  # at the bottom of the file. Offering it here would destroy the log.
 }
 
 # --- report ---------------------------------------------------------------
@@ -574,4 +575,16 @@ rc="${PIPESTATUS[0]}"
 
 persist_log "${RUNLOG}" "${rc}"
 rm -f "${RUNLOG}"
+
+# Only now, with the record safely on the stick, may the machine be powered
+# down. This ordering was learned the hard way: with the offer inside the run,
+# an operator who accepted a reboot took the machine down before the log was
+# written, destroying the only account of an install that had just succeeded.
+#
+# Nothing is offered after a failure — a machine whose install did not complete
+# should stay up, showing why.
+if [ "${rc}" -eq 0 ] && [ -n "${TARGET}" ]; then
+  offer_reboot
+fi
+
 exit "${rc}"

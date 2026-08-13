@@ -71,6 +71,23 @@ check "p powers off" grep -q 'STUB_POWEROFF_CALLED' <<< "${out}"
 check "reboot goes through an overridable function" grep -q '^do_reboot()' "${AUTORUN}"
 check "poweroff goes through an overridable function" grep -q '^do_poweroff()' "${AUTORUN}"
 
+# --- the log must be written BEFORE anything can power the machine down ---
+# Found on hardware: an install succeeded, the operator accepted the reboot
+# offer, and no log reached the stick. The reboot happened inside the run, so
+# persistence never got its turn — losing the record on the single most common
+# successful path.
+check "every reboot offer happens after the log is written" bash -c '
+  p=$(grep -n "persist_log \"" "$1" | cut -d: -f1)
+  [ -n "$p" ] || exit 1
+  # every call site of offer_reboot, ignoring its definition
+  for o in $(grep -nE "^[[:space:]]*offer_reboot[[:space:]]*$" "$1" | cut -d: -f1); do
+    [ "$o" -gt "$p" ] || exit 1
+  done
+  exit 0' _ "${AUTORUN}"
+
+check "no reboot is offered after a failed run" bash -c '
+  grep -qE "rc\}\" -eq 0 \].*&&|\[ \"\$\{rc\}\" -eq 0 \]" "$1"' _ "${AUTORUN}"
+
 # --- log naming -----------------------------------------------------------
 # The test laptop's clock runs weeks slow, so a timestamp alone cannot
 # distinguish runs. The target device is the part an operator can correlate.
