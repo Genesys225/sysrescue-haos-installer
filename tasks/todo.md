@@ -31,7 +31,7 @@ Ordered by dependency. See [plan.md](plan.md) for strategy and risks.
   - Files: `build/make-stick.sh`, `src/500-haos.yaml`, `src/autorun`
 
 - [x] **Task 4: Preflight guards** — code complete. All four implemented and covered by 22 assertions in `tests/test-preflight.sh`, each checked for both the refusal and its remediation text. Corrupt checksum, missing sidecar, zero images, two images, legacy boot, and absent boot medium all refuse. Running `src/autorun` on the workstation stops at the bootmnt guard without listing anything.
-  - **Outstanding: the boot-level check.** The guards have not yet been seen refusing on real hardware. The test laptop boots legacy, so re-populating the stick and booting it there exercises `require_uefi` against the real thing — the one guard whose failure mode is most expensive to get wrong.
+  - **Boot-level check closed, on hardware.** `require_uefi` refused on the legacy-booting laptop; the operator used the remediation text to locate the machine's UEFI boot setting, changed it, and the next boot passed preflight. Both branches exercised on real hardware, and the acceptance criterion — that a refusal names an action, not just a fault — was met in the strongest available way: someone acted on it without further help.
   - Two Task 3 behaviours were removed here, deliberately: writing a report file to the boot medium (impossible on a read-only mount; Task 8 owns logging after a remount) and `mkdir -p` on the boot medium path (a side effect that created a directory a later test needed absent).
   - Files: `src/autorun`, `tests/test-preflight.sh`, `tests/test-skeleton.sh`
 
