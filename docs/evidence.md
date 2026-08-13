@@ -1,5 +1,12 @@
 # Evidence
 
+> **The two Task 7 images below show an older interface.** They were captured
+> when the disk was chosen by typing a number and confirmed by typing the
+> device path. Selection is now arrow-driven and both steps are a single
+> keypress. The images are kept because what they document — that the run
+> reached those stages on a real machine — is unchanged, but do not read them
+> as a picture of the current tool. The README shows the current interface.
+
 Screenshots and logs captured when a checkpoint passed. Kept because "the test
 suite is green" and "it worked on the machine" are different claims, and only
 the second one matters for an installer that erases disks.
