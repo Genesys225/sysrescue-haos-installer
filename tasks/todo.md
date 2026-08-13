@@ -62,7 +62,12 @@ Ordered by dependency. See [plan.md](plan.md) for strategy and risks.
   - **Not yet proven:** behaviour against an actual block device (O_DIRECT on real hardware), and the full boot → preflight → menu → confirm → write path inside a guest. Both belong to the QEMU run.
   - Files: `src/autorun`, `tests/test-write.sh`
 
-- [ ] **Task 8: Settle, log, report, offer reboot**
+- [x] **Task 8: Settle, log, report, offer reboot** — done. 18 assertions in `tests/test-completion.sh`.
+  - The logging half of this task was delivered early, during Task 4, after the read-only mount was found on hardware. What remained: `sync` + `partprobe`, showing the resulting partition table, the handover text, and the reboot offer.
+  - **`reboot` and `poweroff` are wrapped in `do_reboot`/`do_poweroff` so the suite can replace them.** Written inline, the first test run would have restarted this workstation. Two assertions exist purely to keep them wrapped.
+  - Neither option is the default, and Return alone leaves the machine running — asserted for empty input, `n`, and an unrecognised answer. An installer that reboots on a stray keystroke can pull a disk out from under someone.
+  - Log names now carry the target device (`install-vda-...`) rather than only a timestamp, because the test laptop's clock runs three weeks slow and a timestamp alone cannot distinguish runs.
+  - Files: `src/autorun`, `tests/test-completion.sh`
   - **Must `mount -o remount,rw /run/archiso/bootmnt` first** — Task 3 established the boot medium is mounted read-only, and the remount was verified working on real hardware. Without it the log silently fails to write.
   - `sync` and `partprobe`, print the resulting partition table, tee the whole run to `logs/install-<UTC>-<target>.log` on the stick, then print next steps: remove the USB, first boot needs Ethernet and internet, reach `http://homeassistant.local:8123`. Offer reboot or poweroff with neither as default.
   - Log filenames must not assume a correct clock: the test laptop's was three weeks slow. Include the target device in the name so runs stay distinguishable regardless.

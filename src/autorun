@@ -319,6 +319,9 @@ run_selection() {
   require_block_device "${TARGET}"
   write_image "${TARGET}"
   verify_image "${TARGET}"
+  settle_target "${TARGET}"
+  report_next_steps "${TARGET}"
+  offer_reboot
 }
 
 # --- report ---------------------------------------------------------------
@@ -366,6 +369,62 @@ report() {
   hr
 }
 
+# --- completion -----------------------------------------------------------
+
+# Make the kernel re-read the partition table, then show the operator what
+# the disk now holds. Seeing hassos-boot and hassos-data appear is the
+# difference between "the tool said OK" and "the disk changed".
+settle_target() {
+  local dev="$1"
+  sync
+  partprobe "${dev}" 2>/dev/null || true
+  say ""
+  say "  ${dev} now contains:"
+  partition_table "${dev}"
+}
+
+report_next_steps() {
+  local dev="$1"
+  say ""
+  hr
+  say "  Home Assistant OS is installed on ${dev}."
+  hr
+  say ""
+  say "  1. Power off and REMOVE THIS USB STICK. If it is left in, the machine"
+  say "     may boot the installer again instead of the system you just wrote."
+  say ""
+  say "  2. Connect Ethernet before first boot. Home Assistant downloads its"
+  say "     core on first start and cannot finish setup without internet."
+  say ""
+  say "  3. First boot takes several minutes and the screen may sit idle while"
+  say "     it downloads. That is expected — do not power it off."
+  say ""
+  say "  4. Then reach it from another machine at:"
+  say "        http://homeassistant.local:8123"
+  say ""
+}
+
+# Kept as separate functions purely so the test suite can replace them. Inline
+# `reboot` would have restarted the workstation the first time the suite ran.
+do_reboot()   { reboot; }
+do_poweroff() { poweroff; }
+
+# Neither option is the default, and Return alone does nothing. An installer
+# that reboots on a stray keystroke can pull a disk out from under someone
+# mid-copy.
+offer_reboot() {
+  local answer
+  say "  Reboot now, power off, or leave the machine running?"
+  printf '    [r] reboot   [p] power off   [anything else] leave it running: '
+  read -r answer || answer=""
+
+  case "${answer}" in
+    r|R) say ""; say "  Rebooting. Remove the stick as it goes down."; do_reboot ;;
+    p|P) say ""; say "  Powering off. Remove the stick before starting it again."; do_poweroff ;;
+    *)   say ""; say "  Left running. Remove the stick before the next boot." ;;
+  esac
+}
+
 # --- persistence ----------------------------------------------------------
 
 # The boot medium mounts read-only, so the run has to remount it to leave any
@@ -388,8 +447,12 @@ persist_log() {
   fi
 
   # Clock skew is real — the test laptop's was three weeks slow — so the name
-  # carries the host and the pid too, and successive runs never collide.
-  dest="${logdir}/preflight-$(date -u '+%Y%m%dT%H%M%SZ')-$(uname -n)-$$.log"
+  # carries the host and the pid too, and successive runs never collide. The
+  # target device is included when one was chosen: it is the part an operator
+  # can actually correlate with the machine in front of them.
+  local what="preflight"
+  [ -n "${TARGET}" ] && what="install-$(basename "${TARGET}")"
+  dest="${logdir}/${what}-$(date -u '+%Y%m%dT%H%M%SZ')-$(uname -n)-$$.log"
 
   if mkdir -p "${logdir}" 2>/dev/null && cp "${src}" "${dest}" 2>/dev/null; then
     sync
