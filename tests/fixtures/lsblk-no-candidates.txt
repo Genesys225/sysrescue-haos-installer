@@ -1,0 +1,2 @@
+NAME="/dev/sda" SIZE="14.6G" TYPE="disk" TRAN="usb" RM="1" MODEL="Ultra Fit"
+NAME="/dev/sr0" SIZE="1024M" TYPE="rom" TRAN="sata" RM="1" MODEL="QEMU DVD-ROM"

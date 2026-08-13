@@ -1,0 +1,2 @@
+NAME="/dev/sda" SIZE="14.6G" TYPE="disk" TRAN="usb" RM="1" MODEL="Ultra Fit"
+NAME="/dev/nvme0n1" SIZE="238.5G" TYPE="disk" TRAN="nvme" RM="0" MODEL="SAMSUNG MZVLB256HBHQ-000L7"

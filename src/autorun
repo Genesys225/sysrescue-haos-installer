@@ -16,14 +16,16 @@ set -uo pipefail
 
 BOOTMNT="/run/archiso/bootmnt"
 EFI_SYSFS="/sys/firmware/efi"
+SOURCE_ONLY=0
 
-# Both overrides exist so the guards can be exercised without booting a
+# These overrides exist so the logic can be exercised without booting a
 # machine. Nothing in normal operation passes them — SystemRescue invokes this
 # script with no arguments at all.
 while [ $# -gt 0 ]; do
   case "$1" in
-    --bootmnt)  BOOTMNT="${2:-}";   shift 2 ;;
-    --efi-path) EFI_SYSFS="${2:-}"; shift 2 ;;
+    --bootmnt)     BOOTMNT="${2:-}";   shift 2 ;;
+    --efi-path)    EFI_SYSFS="${2:-}"; shift 2 ;;
+    --source-only) SOURCE_ONLY=1;      shift ;;
     *) shift ;;
   esac
 done
@@ -94,6 +96,84 @@ require_checksum() {
      Re-populate the stick with ./build/make-stick.sh and try again.
        expected ${expected}
        actual   ${actual}"
+}
+
+# --- candidate enumeration ------------------------------------------------
+
+# Device inventory comes from lsblk's --pairs format, not its columnar output.
+# MODEL contains spaces ("EXAMPLE SATA SSD 960G") and TRAN is empty for loop
+# and virtio devices, so positional parsing misreads real machines — quietly,
+# which is the dangerous kind.
+block_devices() {
+  lsblk -dPpo NAME,SIZE,TYPE,TRAN,RM,MODEL 2>/dev/null
+}
+
+# The medium we booted from is never a candidate. Resolve it from the mount
+# through its partition to the parent disk; an unresolvable answer yields an
+# empty string, which excludes nothing rather than excluding the wrong thing.
+boot_disk() {
+  local src parent
+  src="$(findmnt -no SOURCE "${BOOTMNT}" 2>/dev/null)" || return 0
+  [ -n "${src}" ] || return 0
+  parent="$(lsblk -no PKNAME "${src}" 2>/dev/null | tr -d '[:space:]')"
+  if [ -n "${parent}" ]; then printf '/dev/%s\n' "${parent}"; else printf '%s\n' "${src}"; fi
+}
+
+# filter_candidates <boot-disk> — reads lsblk pairs on stdin, writes the
+# device path of every disk we are willing to offer as a target.
+#
+# Exclusions, each for its own reason:
+#   TYPE != disk   partitions, optical drives, loop devices
+#   RM = 1         removable media — the operator's other sticks
+#   TRAN = usb     the installer's own medium and its neighbours
+#   zram/loop/sr   RAM and pseudo devices that report TYPE=disk anyway
+#   the boot disk  writing to it mid-run destroys the running system
+#
+# Undersized disks are NOT excluded. A 16 GB eMMC is a poor host for HAOS, but
+# hiding the only disk in the machine is worse than warning about it.
+filter_candidates() {
+  awk -v boot="${1:-}" '
+    function val(line, key,   s) {
+      if (match(line, key "=\"[^\"]*\"")) {
+        s = substr(line, RSTART, RLENGTH)
+        sub(key "=\"", "", s); sub("\"$", "", s)
+        return s
+      }
+      return ""
+    }
+    {
+      name = val($0, "NAME"); type = val($0, "TYPE")
+      tran = val($0, "TRAN"); rm   = val($0, "RM")
+      if (type != "disk") next
+      if (rm == "1") next
+      if (tran == "usb") next
+      if (name ~ /\/(loop|zram|sr|ram)[0-9]+$/) next
+      if (boot != "" && name == boot) next
+      print name
+    }'
+}
+
+# describe_device <path> — reads lsblk pairs on stdin, writes a human summary
+describe_device() {
+  awk -v want="$1" '
+    function val(line, key,   s) {
+      if (match(line, key "=\"[^\"]*\"")) {
+        s = substr(line, RSTART, RLENGTH)
+        sub(key "=\"", "", s); sub("\"$", "", s)
+        return s
+      }
+      return ""
+    }
+    val($0, "NAME") == want {
+      size = val($0, "SIZE"); model = val($0, "MODEL"); tran = val($0, "TRAN")
+      if (model == "") model = "(no model reported)"
+      if (tran == "") tran = "unknown bus"
+      printf "%s  %s  [%s]\n", size, model, tran
+    }'
+}
+
+list_candidates() {
+  block_devices | filter_candidates "$(boot_disk)"
 }
 
 # --- report ---------------------------------------------------------------
@@ -190,9 +270,27 @@ main() {
   gather
   report
 
+  local inventory candidates
+  inventory="$(block_devices)"
+  candidates="$(printf '%s\n' "${inventory}" | filter_candidates "$(boot_disk)")"
+
+  say "  Installable disks found:"
+  if [ -z "${candidates}" ]; then
+    say "    (none)"
+  else
+    while IFS= read -r dev; do
+      [ -n "${dev}" ] || continue
+      say "    ${dev}  $(printf '%s\n' "${inventory}" | describe_device "${dev}")"
+    done <<< "${candidates}"
+  fi
   say ""
+
   say "  Preflight complete. No disk has been touched."
 }
+
+# Sourced by the test suite to reach the functions above without running the
+# installer. Nothing in normal operation passes this.
+[ "${SOURCE_ONLY}" -eq 1 ] && return 0 2>/dev/null
 
 # Capture everything the run says, then persist it. PIPESTATUS carries main's
 # own exit status past tee, so the guards' refusals still set the exit code

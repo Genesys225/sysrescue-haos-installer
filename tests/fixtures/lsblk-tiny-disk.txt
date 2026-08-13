@@ -1,0 +1,2 @@
+NAME="/dev/sda" SIZE="14.6G" TYPE="disk" TRAN="usb" RM="1" MODEL="Ultra Fit"
+NAME="/dev/mmcblk0" SIZE="14.9G" TYPE="disk" TRAN="" RM="0" MODEL="SC16G"

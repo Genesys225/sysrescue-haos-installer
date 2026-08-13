@@ -35,11 +35,11 @@ Ordered by dependency. See [plan.md](plan.md) for strategy and risks.
   - Two Task 3 behaviours were removed here, deliberately: writing a report file to the boot medium (impossible on a read-only mount; Task 8 owns logging after a remount) and `mkdir -p` on the boot medium path (a side effect that created a directory a later test needed absent).
   - Files: `src/autorun`, `tests/test-preflight.sh`, `tests/test-skeleton.sh`
 
-- [ ] **Task 5: Candidate enumeration and filtering**
-  - `list_candidates()` over `lsblk -dpno NAME,SIZE,MODEL,TRAN,RM,TYPE`: keep `TYPE=disk`; drop `RM=1`, `TRAN=usb`, loop/zram/rom, and the boot device. Boot device resolves via `findmnt -no SOURCE /run/archiso/bootmnt` → partition → parent disk.
-  - Acceptance: against the captured workstation fixture, the USB stick and every loop device are excluded and the four NVMe/SATA disks remain; against the QEMU fixture, only the virtio target remains.
-  - Verify: `./tests/run.sh` — pure unit tests, no hardware.
-  - Files: `src/autorun`, `tests/fixtures/lsblk-*`, `tests/run.sh`
+- [x] **Task 5: Candidate enumeration and filtering** — done. 16 assertions over five captured fixtures; also verified against this workstation's live device list (45 loop devices and the USB stick excluded, five real disks kept, model strings with spaces intact).
+  - **Parsing uses lsblk's `--pairs` format, not columns.** The plan specified `-dpno`, which is columnar. That misreads real machines: `MODEL` contains spaces (`EXAMPLE SATA SSD 960G`) and `TRAN` is empty for loop and virtio devices, so fields shift silently. Silent misparsing in the code that decides which disk to erase is not an acceptable failure mode, so the format changed.
+  - Undersized disks are deliberately **kept**. A 16 GB eMMC is a poor host for HAOS, but hiding the only disk in a machine is worse than warning about it — and the operator still has to confirm.
+  - An unresolvable boot device yields an empty exclusion rather than a guessed one: excluding nothing is recoverable, excluding the wrong thing is not.
+  - Files: `src/autorun`, `tests/test-enumerate.sh`, `tests/fixtures/lsblk-*.txt`
 
 - [ ] **Task 6: Selection and typed confirmation** (still non-destructive)
   - Numbered menu showing size, model, transport, and each disk's existing partitions and labels. Zero candidates is a hard stop. Never auto-select, including when exactly one candidate exists. `confirm_target` requires the exact device path.

@@ -1,0 +1,4 @@
+NAME="/dev/sda" SIZE="8G" TYPE="disk" TRAN="usb" RM="1" MODEL="QEMU HARDDISK"
+NAME="/dev/vda" SIZE="64G" TYPE="disk" TRAN="" RM="0" MODEL=""
+NAME="/dev/sr0" SIZE="1024M" TYPE="rom" TRAN="sata" RM="1" MODEL="QEMU DVD-ROM"
+NAME="/dev/zram0" SIZE="7.7G" TYPE="disk" TRAN="" RM="0" MODEL=""
