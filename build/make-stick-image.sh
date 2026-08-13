@@ -3,11 +3,19 @@
 #
 #   sudo ./build/make-stick-image.sh
 #
-# Why this exists: the writer needs a raw block device, but it has no
-# removable-media filter (it only rejects partitions, via PKNAME), so a loop
-# device is an acceptable target. That buys two things — the checkpoint no
-# longer waits on working hardware, and once the image exists it can be
-# populated with mtools and booted in QEMU entirely without root.
+# Why this exists: the writer needs a raw block device, and a loop device is an
+# acceptable one. That buys two things — the checkpoint no longer waits on
+# working hardware, and once the image exists it can be populated with mtools
+# and booted in QEMU entirely without root.
+#
+# INTERACTIVE. The writer does check whether the target is removable/hotplug;
+# for a loop device it warns and asks for confirmation:
+#
+#   WARNING: /dev/loopN is not a removable or hotplug device
+#   Are you sure you want to overwrite it? (y/n)?
+#
+# Answer y. It is a hard stop for automation — this script cannot run
+# unattended, and should not be wrapped in one that assumes it can.
 #
 # This is the ONLY step in the project that needs privileges.
 set -Eeuo pipefail

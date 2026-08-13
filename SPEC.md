@@ -17,7 +17,12 @@ A reusable USB stick that boots a bare x86-64 machine into a live environment an
 
 **Why this exists.** HAOS running *from* a USB stick is the failure mode being retired. Installing to internal NVMe/SATA removes a class of problems — slow random I/O, flash wear under a database workload, and a boot device that can be knocked out of its socket.
 
-> **Correction (Task 3).** This section originally offered the dead 64 GB Kingston as proof of that thesis: HAOS installed 2025‑06‑25, docker directory empty and `lost+found` populated on both writable partitions by 2026‑07‑01. That was an over-claim on a single data point. On 2026‑08‑13, mid-Task-3, the stick reported `detected capacity change from 120913920 to 0` — it still enumerates on the USB bus but its storage layer now returns zero capacity. That is a **failed flash controller**, which explains the 2026‑07 corruption at least as well as write-wear does. The rationale above stands on its general merits; this particular stick is not evidence for it.
+> **Correction (Task 3).** This section originally offered the 64 GB Kingston as proof of that thesis — "a corpse of that pattern" — citing an empty `docker/` directory and `lost+found` "populated" on both writable partitions. Two errors, recorded so neither is repeated:
+>
+> 1. **`lost+found` was not populated.** ext4 preallocates it to roughly 16 KB at mkfs time; that is its normal *empty* size, not evidence of an fsck recovery. What remains — `docker/` and `supervisor/homeassistant/` both empty — is equally consistent with an install that was simply never used.
+> 2. **The stick is not dead.** Mid-task it reported `detected capacity change from 120913920 to 0` after its filesystems were unmounted, and that was called a failed flash controller here. It was a stale device node. A replug re-enumerated it at the full 61.9 GB with all eight partitions intact and mounting read-write.
+>
+> The rationale for installing to internal storage stands on general grounds. This stick was never evidence for it, and a confident hardware verdict was drawn from a single kernel line.
 
 **Who it's for.** The operator standing at the target machine. Assumed competent with a boot menu; assumed to know nothing about that machine's disk layout, which is why the tool shows its work before it writes.
 
