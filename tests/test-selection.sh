@@ -71,23 +71,23 @@ for bad in "0" "99" "abc" ""; do
 done
 
 # --- confirmation ---------------------------------------------------------
-# On a console this is a second selection, defaulting to Cancel. Piped input
-# has no highlight, so it asks for the word outright.
+# Enter selects the disk, Enter again confirms. Nothing is typed. On piped
+# input an empty line is that second Enter; any other key cancels.
+out="$(printf '1\n\n' | drive lsblk-single-disk.txt /dev/nvme0n1)"
+check "a second Enter confirms" grep -q 'WOULD WRITE' <<< "${out}"
+check "warns that the contents are destroyed" grep -qi 'destroy\|erase\|overwrit' <<< "${out}"
+
 out="$(printf '1\ny\n' | drive lsblk-single-disk.txt /dev/nvme0n1)"
-check "rejects a bare y" bash -c '! grep -q "WOULD WRITE" <<< "$1"' _ "${out}"
-check "says it was not confirmed" grep -qi 'did not match\|not confirmed' <<< "${out}"
+check "a non-Enter answer aborts" bash -c '! grep -q "WOULD WRITE" <<< "$1"' _ "${out}"
+check "says it was aborted" grep -qi "aborted" <<< "${out}"
 
 out="$(printf '1\nno\n' | drive lsblk-single-disk.txt /dev/nvme0n1)"
-check "rejects an explicit no" bash -c '! grep -q "WOULD WRITE" <<< "$1"' _ "${out}"
+check "a word aborts too" bash -c '! grep -q "WOULD WRITE" <<< "$1"' _ "${out}"
+
+check "nothing has to be typed to confirm" bash -c '! grep -q "Type the device path\|Type .yes." "$1"' _ "${AUTORUN}"
+check "the prompt names both keys" bash -c 'grep -q "Enter to confirm, Esc to abort" "$1"' _ "${AUTORUN}"
 
 out="$(printf '1\n\n' | drive lsblk-single-disk.txt /dev/nvme0n1)"
-check "rejects an empty confirmation" bash -c '! grep -q "WOULD WRITE" <<< "$1"' _ "${out}"
-
-out="$(printf '1\nyes\n' | drive lsblk-single-disk.txt /dev/nvme0n1)"
-check "accepts yes" grep -q 'WOULD WRITE' <<< "${out}"
-
-check "no longer demands a typed device path" bash -c '! grep -q "Type the device path" "$1"' _ "${AUTORUN}"
-check "warns that the contents are destroyed" grep -qi 'destroy\|erase\|overwrit' <<< "${out}"
 
 # --- the stub is still a stub ---------------------------------------------
 check "names the image it would write" grep -qi 'img.xz\|image' <<< "${out}"

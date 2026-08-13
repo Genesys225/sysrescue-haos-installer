@@ -206,6 +206,7 @@ read_key() {
       case "${rest}" in
         '[A') printf 'up\n' ;;
         '[B') printf 'down\n' ;;
+        '')   printf 'escape\n' ;;
         *)    printf 'other\n' ;;
       esac ;;
     [0-9]) printf 'digit:%s\n' "${k}" ;;
@@ -263,23 +264,25 @@ confirm_target() {
   say "  installed. This cannot be undone."
   say ""
 
+  printf '  Enter to confirm, Esc to abort: '
+
   if [ -t 0 ]; then
-    # A second selection rather than a typed path. The safety is in where the
-    # highlight starts: Cancel is first, so Enter pressed by reflex aborts.
-    # Erasing requires a deliberate move down before confirming.
-    select_from_list "Cancel — leave ${dev} untouched" "ERASE ${dev} and install Home Assistant OS" ||
-      die "cancelled. Nothing was written."
-    case "${SELECTED}" in
-      ERASE*) return 0 ;;
-      *) die "cancelled — ${dev} was not touched. Nothing was written." ;;
-    esac
+    # Two keys mean something here and nothing else does. A stray keypress is
+    # ignored rather than taken as either an answer or an abort.
+    while :; do
+      case "$(read_key)" in
+        enter)  break ;;
+        escape) die "aborted — ${dev} was not touched. Nothing was written." ;;
+        eof)    die "input ended before confirmation. Nothing was written." ;;
+        *)      : ;;
+      esac
+    done
   else
-    # Piped input has no highlight to default to, so it must say so outright.
-    printf "  Type 'yes' to erase %s: " "${dev}"
-    read -r answer || answer=""
-    [ "${answer}" = "yes" ] ||
-      die "not confirmed — you answered '${answer}'. Nothing was written."
+    read -r answer || answer="abort"
+    [ -z "${answer}" ] ||
+      die "aborted — you answered '${answer}'. Nothing was written."
   fi
+  say ""
 }
 
 # Last line of defence. Enumeration only ever offers block devices, so if a
