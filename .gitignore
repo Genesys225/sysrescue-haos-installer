@@ -2,3 +2,6 @@ tmp/
 *.iso
 *.img
 *.img.xz
+
+# Agent instructions — local only, never published
+CLAUDE.md
